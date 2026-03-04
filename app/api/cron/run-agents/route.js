@@ -4,6 +4,7 @@
 
 import { getTasks, getAgents, updateTask, addActivity, addContent } from '../../../../lib/airtable'
 import { callAI } from '../../../../lib/ai'
+import { buildDesignContext, isFigmaConfigured } from '../../../../lib/figma'
 import { NextResponse } from 'next/server'
 
 // Memory helpers
@@ -147,10 +148,26 @@ export async function GET(request) {
             ).join('\n')
           : ''
 
+        // Pull Figma design context for PIXEL agent
+        let figmaContext = ''
+        if (agent.name === 'PIXEL' && isFigmaConfigured()) {
+          // Look for Figma URL in task description or a dedicated field
+          const figmaUrlMatch = (task.description || '').match(/(https?:\/\/[^\s]*figma\.com\/[^\s]+)/)
+          if (figmaUrlMatch) {
+            try {
+              const ctx = await buildDesignContext(figmaUrlMatch[1])
+              if (ctx) figmaContext = '\n\n' + ctx
+              console.log(`[RUNNER] Pulled Figma context for PIXEL (${ctx?.length || 0} chars)`)
+            } catch (err) {
+              console.warn(`[RUNNER] Figma context failed: ${err.message}`)
+            }
+          }
+        }
+
         // Build the prompt (with revision context if applicable)
         const userPrompt = (isRevision
           ? buildRevisionPrompt(task, feedbackContext, previousOutput)
-          : buildTaskPrompt(task)) + memoryContext
+          : buildTaskPrompt(task)) + memoryContext + figmaContext
 
         // Call the AI
         const output = await callAI({

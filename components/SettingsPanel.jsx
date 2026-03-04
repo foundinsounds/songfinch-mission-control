@@ -30,7 +30,10 @@ export default function SettingsPanel({ theme, onToggleTheme, onClose }) {
   const updateSetting = (key, value) => {
     setSettings(prev => {
       const next = { ...prev, [key]: value }
-      try { localStorage.setItem('roundtable-settings', JSON.stringify(next)) } catch {}
+      try {
+        localStorage.setItem('roundtable-settings', JSON.stringify(next))
+        window.dispatchEvent(new Event('roundtable-settings-changed'))
+      } catch {}
       return next
     })
   }

@@ -1,16 +1,28 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CRON_INTERVAL_MINUTES } from '../lib/constants'
+
+function getRunInterval() {
+  if (typeof window === 'undefined') return 60
+  try {
+    const saved = localStorage.getItem('roundtable-settings')
+    if (saved) {
+      const settings = JSON.parse(saved)
+      return settings.runInterval || 60
+    }
+  } catch {}
+  return 60
+}
 
 function useNextRunCountdown() {
   const [timeLeft, setTimeLeft] = useState('')
 
   useEffect(() => {
     function calc() {
+      const intervalMinutes = getRunInterval()
       const now = new Date()
       const next = new Date(now)
-      next.setMinutes(next.getMinutes() - (next.getMinutes() % CRON_INTERVAL_MINUTES) + CRON_INTERVAL_MINUTES)
+      next.setMinutes(next.getMinutes() - (next.getMinutes() % intervalMinutes) + intervalMinutes)
       next.setSeconds(0)
       next.setMilliseconds(0)
 

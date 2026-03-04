@@ -33,6 +33,16 @@ export default function Roundtable() {
   const [showCommandBar, setShowCommandBar] = useState(false)
   const [currentView, setCurrentView] = useState('kanban') // 'kanban' | 'list' | 'content' | 'agents' | 'analytics'
 
+  // Settings revision counter — bumped when localStorage changes
+  const [settingsRev, setSettingsRev] = useState(0)
+
+  // Listen for settings changes (from SettingsPanel in same tab)
+  useEffect(() => {
+    const handler = () => setSettingsRev(r => r + 1)
+    window.addEventListener('roundtable-settings-changed', handler)
+    return () => window.removeEventListener('roundtable-settings-changed', handler)
+  }, [])
+
   // Theme state
   const [theme, setTheme] = useState('dark')
 
@@ -66,7 +76,10 @@ export default function Roundtable() {
       const data = await res.json()
 
       if (data.agents && data.agents.length > 0) {
-        setAgents(data.agents)
+        // Merge: Airtable agents + any fallback agents not in Airtable
+        const airtableNames = new Set(data.agents.map(a => a.name))
+        const missing = FALLBACK_AGENTS.filter(a => !airtableNames.has(a.name))
+        setAgents([...data.agents, ...missing])
       }
       if (data.tasks && data.tasks.length > 0) {
         setTasks(data.tasks)
@@ -83,12 +96,50 @@ export default function Roundtable() {
     }
   }, [])
 
-  // Initial fetch + polling every 15 seconds
+  // Read settings from localStorage
+  const getSettings = useCallback(() => {
+    if (typeof window === 'undefined') return { autoRunAgents: false, runInterval: 60, pollInterval: 15 }
+    try {
+      const saved = localStorage.getItem('roundtable-settings')
+      if (saved) return { autoRunAgents: false, runInterval: 60, pollInterval: 15, ...JSON.parse(saved) }
+    } catch {}
+    return { autoRunAgents: false, runInterval: 60, pollInterval: 15 }
+  }, [])
+
+  // Initial fetch + polling (uses configured pollInterval)
   useEffect(() => {
     fetchData()
-    const poller = setInterval(fetchData, 15000)
+    const pollSeconds = getSettings().pollInterval || 15
+    const poller = setInterval(fetchData, pollSeconds * 1000)
     return () => clearInterval(poller)
-  }, [fetchData])
+  }, [fetchData, getSettings])
+
+  // Auto-run agents on configured interval
+  useEffect(() => {
+    function checkAndRun() {
+      const settings = getSettings()
+      if (!settings.autoRunAgents) return
+
+      // Run agents automatically
+      fetch('/api/cron/run-agents')
+        .then(res => res.json())
+        .then(data => {
+          console.log('[Roundtable] Auto-run result:', data)
+          setTimeout(fetchData, 2000)
+        })
+        .catch(err => console.error('[Roundtable] Auto-run failed:', err))
+    }
+
+    const settings = getSettings()
+    if (!settings.autoRunAgents) return
+
+    // Run immediately on enable, then on interval
+    checkAndRun()
+    const intervalMs = (settings.runInterval || 60) * 60 * 1000
+    const runner = setInterval(checkAndRun, intervalMs)
+    return () => clearInterval(runner)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getSettings, fetchData, settingsRev])
 
   // Clock
   useEffect(() => {
