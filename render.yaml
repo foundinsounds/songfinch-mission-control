@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: songfinch-mission-control
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: AIRTABLE_API_KEY
+        sync: false
+      - key: AIRTABLE_BASE_ID
+        sync: false
+      - key: NODE_ENV
+        value: production
