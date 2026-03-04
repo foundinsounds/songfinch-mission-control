@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { AGENTS } from '../lib/agents'
 
 const STATUS_COLORS = {
@@ -29,123 +30,167 @@ function timeAgo(dateStr) {
   return `${days}d ago`
 }
 
-export default function ListView({ tasks, onTaskClick, onQuickApprove }) {
-  const sorted = [...tasks].sort((a, b) => {
+export default function ListView({ tasks, agents = [], onTaskClick, onQuickApprove, selectedAgent }) {
+  const [agentFilter, setAgentFilter] = useState(selectedAgent || null)
+
+  const visibleTasks = agentFilter
+    ? tasks.filter(t => t.agent === agentFilter)
+    : tasks
+
+  const sorted = [...visibleTasks].sort((a, b) => {
     const order = { 'In Progress': 0, 'Review': 1, 'Assigned': 2, 'Inbox': 3, 'Done': 4 }
     return (order[a.status] ?? 5) - (order[b.status] ?? 5)
   })
 
+  // Get unique agents from tasks
+  const taskAgents = [...new Set(tasks.map(t => t.agent).filter(Boolean))].sort()
+
   return (
-    <div className="h-full overflow-y-auto">
-      <table className="w-full text-left">
-        <thead className="sticky top-0 z-10">
-          <tr className="bg-dark-800/90 backdrop-blur border-b border-dark-500 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-            <th className="px-4 py-3 w-8"></th>
-            <th className="px-4 py-3">Task</th>
-            <th className="px-4 py-3 w-28">Status</th>
-            <th className="px-4 py-3 w-32">Agent</th>
-            <th className="px-4 py-3 w-28">Type</th>
-            <th className="px-4 py-3 w-24">Priority</th>
-            <th className="px-4 py-3 w-28">Created</th>
-            <th className="px-4 py-3 w-28">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((task) => {
-            const agent = task.agent ? AGENTS.find(a => a.name === task.agent) : null
-            const isDone = task.status === 'Done'
-            const isReview = task.status === 'Review'
+    <div className="h-full flex flex-col">
+      {/* Agent filter bar */}
+      <div className="px-4 py-2 border-b border-dark-500 flex items-center gap-1.5 shrink-0 bg-dark-800/30 overflow-x-auto">
+        <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mr-1 shrink-0">Agent:</span>
+        <button
+          onClick={() => setAgentFilter(null)}
+          className={`text-[10px] px-2 py-1 rounded-md transition-all shrink-0 ${
+            !agentFilter
+              ? 'bg-white/10 text-white font-semibold'
+              : 'text-gray-500 hover:text-gray-300 hover:bg-dark-600'
+          }`}
+        >
+          All
+        </button>
+        {taskAgents.map(name => {
+          const ag = agents.find(a => a.name === name)
+          return (
+            <button
+              key={name}
+              onClick={() => setAgentFilter(agentFilter === name ? null : name)}
+              className={`text-[10px] px-2 py-1 rounded-md transition-all shrink-0 flex items-center gap-1 ${
+                agentFilter === name
+                  ? 'bg-white/10 text-white font-semibold'
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-dark-600'
+              }`}
+            >
+              {ag?.emoji && <span className="text-xs">{ag.emoji}</span>}
+              {name}
+            </button>
+          )
+        })}
+      </div>
 
-            return (
-              <tr
-                key={task.id}
-                onClick={() => onTaskClick(task)}
-                className={`border-b border-dark-500/50 hover:bg-dark-700/50 transition-colors cursor-pointer ${isDone ? 'opacity-60' : ''}`}
-              >
-                {/* Priority Dot */}
-                <td className="px-4 py-3">
-                  <div className={`w-2.5 h-2.5 rounded-full ${PRIORITY_DOT[task.priority] || 'bg-gray-600'}`} />
-                </td>
+      {/* Table */}
+      <div className="flex-1 overflow-y-auto">
+        <table className="w-full text-left">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-dark-800/90 backdrop-blur border-b border-dark-500 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+              <th className="px-4 py-3 w-8"></th>
+              <th className="px-4 py-3">Task</th>
+              <th className="px-4 py-3 w-28">Status</th>
+              <th className="px-4 py-3 w-32">Agent</th>
+              <th className="px-4 py-3 w-28">Type</th>
+              <th className="px-4 py-3 w-24">Priority</th>
+              <th className="px-4 py-3 w-28">Created</th>
+              <th className="px-4 py-3 w-28">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((task) => {
+              const agent = task.agent ? AGENTS.find(a => a.name === task.agent) : null
+              const isDone = task.status === 'Done'
+              const isReview = task.status === 'Review'
 
-                {/* Task Name + Description */}
-                <td className="px-4 py-3">
-                  <div className="text-[13px] font-semibold text-gray-100 leading-tight">
-                    {task.name}
-                  </div>
-                  {task.description && (
-                    <div className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">
-                      {task.description}
+              return (
+                <tr
+                  key={task.id}
+                  onClick={() => onTaskClick(task)}
+                  className={`border-b border-dark-500/50 hover:bg-dark-700/50 transition-colors cursor-pointer ${isDone ? 'opacity-60' : ''}`}
+                >
+                  {/* Priority Dot */}
+                  <td className="px-4 py-3">
+                    <div className={`w-2.5 h-2.5 rounded-full ${PRIORITY_DOT[task.priority] || 'bg-gray-600'}`} />
+                  </td>
+
+                  {/* Task Name + Description */}
+                  <td className="px-4 py-3">
+                    <div className="text-[13px] font-semibold text-gray-100 leading-tight">
+                      {task.name}
                     </div>
-                  )}
-                </td>
+                    {task.description && (
+                      <div className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">
+                        {task.description}
+                      </div>
+                    )}
+                  </td>
 
-                {/* Status */}
-                <td className="px-4 py-3">
-                  <span className={`text-[10px] font-semibold px-2 py-1 rounded border ${STATUS_COLORS[task.status] || 'bg-dark-600 text-gray-400 border-dark-500'}`}>
-                    {task.status}
-                  </span>
-                </td>
+                  {/* Status */}
+                  <td className="px-4 py-3">
+                    <span className={`text-[10px] font-semibold px-2 py-1 rounded border ${STATUS_COLORS[task.status] || 'bg-dark-600 text-gray-400 border-dark-500'}`}>
+                      {task.status}
+                    </span>
+                  </td>
 
-                {/* Agent */}
-                <td className="px-4 py-3">
-                  {agent ? (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm">{agent.emoji}</span>
-                      <span className="text-[11px] text-gray-300 font-medium">{agent.name}</span>
-                    </div>
-                  ) : (
-                    <span className="text-[11px] text-gray-600 italic">Unassigned</span>
-                  )}
-                </td>
+                  {/* Agent */}
+                  <td className="px-4 py-3">
+                    {agent ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm">{agent.emoji}</span>
+                        <span className="text-[11px] text-gray-300 font-medium">{agent.name}</span>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-gray-600 italic">Unassigned</span>
+                    )}
+                  </td>
 
-                {/* Content Type */}
-                <td className="px-4 py-3">
-                  <span className="text-[11px] text-gray-400">{task.contentType || '—'}</span>
-                </td>
+                  {/* Content Type */}
+                  <td className="px-4 py-3">
+                    <span className="text-[11px] text-gray-400">{task.contentType || '\u2014'}</span>
+                  </td>
 
-                {/* Priority */}
-                <td className="px-4 py-3">
-                  <span className="text-[11px] text-gray-400">{task.priority}</span>
-                </td>
+                  {/* Priority */}
+                  <td className="px-4 py-3">
+                    <span className="text-[11px] text-gray-400">{task.priority}</span>
+                  </td>
 
-                {/* Created */}
-                <td className="px-4 py-3">
-                  <span className="text-[11px] text-gray-500">{timeAgo(task.createdAt)}</span>
-                </td>
+                  {/* Created */}
+                  <td className="px-4 py-3">
+                    <span className="text-[11px] text-gray-500">{timeAgo(task.createdAt)}</span>
+                  </td>
 
-                {/* Actions */}
-                <td className="px-4 py-3">
-                  {isReview && (
-                    <div className="flex gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onQuickApprove && onQuickApprove(task)
-                        }}
-                        className="text-[10px] font-semibold px-2 py-1 rounded bg-accent-green/10 text-accent-green hover:bg-accent-green/20 transition-colors border border-accent-green/20"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onTaskClick(task)
-                        }}
-                        className="text-[10px] font-semibold px-2 py-1 rounded bg-accent-orange/10 text-accent-orange hover:bg-accent-orange/20 transition-colors border border-accent-orange/20"
-                      >
-                        Review
-                      </button>
-                    </div>
-                  )}
-                  {isDone && (
-                    <span className="text-[10px] text-accent-green">&#10003;</span>
-                  )}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+                  {/* Actions */}
+                  <td className="px-4 py-3">
+                    {isReview && (
+                      <div className="flex gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onQuickApprove && onQuickApprove(task)
+                          }}
+                          className="text-[10px] font-semibold px-2 py-1 rounded bg-accent-green/10 text-accent-green hover:bg-accent-green/20 transition-colors border border-accent-green/20"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onTaskClick(task)
+                          }}
+                          className="text-[10px] font-semibold px-2 py-1 rounded bg-accent-orange/10 text-accent-orange hover:bg-accent-orange/20 transition-colors border border-accent-orange/20"
+                        >
+                          Review
+                        </button>
+                      </div>
+                    )}
+                    {isDone && (
+                      <span className="text-[10px] text-accent-green">&#10003;</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

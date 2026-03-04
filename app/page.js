@@ -227,9 +227,8 @@ export default function Roundtable() {
     }
   }, [handleRunAgents, fetchData, tasks])
 
-  const filteredTasks = selectedAgent
-    ? tasks.filter(t => t.agent === selectedAgent)
-    : tasks
+  // Board/List views always show all tasks — sidebar selection highlights but doesn't filter
+  const filteredTasks = tasks
 
   const stats = {
     agentsActive: agents.filter(a => a.status === 'Working' || a.status === 'Active').length,
@@ -298,6 +297,8 @@ export default function Roundtable() {
             {currentView === 'kanban' && (
               <KanbanBoard
                 tasks={filteredTasks}
+                agents={agents}
+                selectedAgent={selectedAgent}
                 onTaskClick={setSelectedTask}
                 onQuickApprove={handleApproveTask}
                 onRequestChanges={(task) => setSelectedTask(task)}
@@ -306,6 +307,8 @@ export default function Roundtable() {
             {currentView === 'list' && (
               <ListView
                 tasks={filteredTasks}
+                agents={agents}
+                selectedAgent={selectedAgent}
                 onTaskClick={setSelectedTask}
                 onQuickApprove={handleApproveTask}
               />
