@@ -10,5 +10,9 @@ services:
         sync: false
       - key: AIRTABLE_BASE_ID
         sync: false
+      - key: GOOGLE_AI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
       - key: NODE_ENV
         value: production

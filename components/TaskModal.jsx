@@ -16,7 +16,40 @@ const STATUS_COLORS = {
   'Done': 'bg-green-500/10 text-green-400',
 }
 
+function DriveIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 12h-6l-2 3H9l-2-3H1" />
+      <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+    </svg>
+  )
+}
+
+function CanvaIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
+    </svg>
+  )
+}
+
+function ExternalLinkIcon({ size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      <polyline points="15 3 21 3 21 9" />
+      <line x1="10" y1="14" x2="21" y2="3" />
+    </svg>
+  )
+}
+
 export default function TaskModal({ task, agent, onClose }) {
+  const hasDriveLink = task.driveLink && task.driveLink.length > 0
+  const hasCanvaLink = task.canvaLink && task.canvaLink.length > 0
+  const isDone = task.status === 'Done'
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
@@ -32,11 +65,16 @@ export default function TaskModal({ task, agent, onClose }) {
           <div className="flex-1 pr-4">
             <div className="flex items-center gap-2 mb-2">
               <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded ${STATUS_COLORS[task.status]}`}>
-                {task.status}
+                {task.status === 'Done' ? 'Done \u2705' : task.status}
               </span>
               <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded border ${PRIORITY_COLORS[task.priority]}`}>
                 {task.priority} Priority
               </span>
+              {task.contentType && (
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-dark-600 text-gray-400">
+                  {task.contentType}
+                </span>
+              )}
             </div>
             <h2 className="text-lg font-bold text-gray-100">{task.name}</h2>
           </div>
@@ -52,6 +90,48 @@ export default function TaskModal({ task, agent, onClose }) {
 
         {/* Body */}
         <div className="px-6 py-5 overflow-y-auto max-h-[60vh]">
+          {/* Google Drive Link - Prominent */}
+          {hasDriveLink && (
+            <a
+              href={task.driveLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 mb-5 p-3 bg-blue-500/5 rounded-lg border border-blue-500/20 hover:bg-blue-500/10 transition-colors group"
+            >
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-500/15 text-blue-400">
+                <DriveIcon size={20} />
+              </div>
+              <div className="flex-1">
+                <div className="text-sm font-semibold text-blue-400">Google Drive</div>
+                <div className="text-xs text-gray-500 truncate">{task.driveLink}</div>
+              </div>
+              <div className="text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                <ExternalLinkIcon size={16} />
+              </div>
+            </a>
+          )}
+
+          {/* Canva Link - Prominent */}
+          {hasCanvaLink && (
+            <a
+              href={task.canvaLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 mb-5 p-3 bg-purple-500/5 rounded-lg border border-purple-500/20 hover:bg-purple-500/10 transition-colors group"
+            >
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-purple-500/15 text-purple-400">
+                <CanvaIcon size={20} />
+              </div>
+              <div className="flex-1">
+                <div className="text-sm font-semibold text-purple-400">Canva Design</div>
+                <div className="text-xs text-gray-500 truncate">{task.canvaLink}</div>
+              </div>
+              <div className="text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                <ExternalLinkIcon size={16} />
+              </div>
+            </a>
+          )}
+
           {/* Agent Assignment */}
           {agent && (
             <div className="flex items-center gap-3 mb-5 p-3 bg-dark-600 rounded-lg">
@@ -65,7 +145,7 @@ export default function TaskModal({ task, agent, onClose }) {
                 {agent.emoji}
               </div>
               <div>
-                <div className="text-sm font-semibold">{agent.name}</div>
+                <div className="text-sm font-semibold">{agent.emoji} {agent.name}</div>
                 <div className="text-xs text-gray-500">{agent.role}</div>
               </div>
             </div>
@@ -136,6 +216,32 @@ export default function TaskModal({ task, agent, onClose }) {
             Created {new Date(task.createdAt).toLocaleDateString()}
           </div>
           <div className="flex gap-2">
+            {(hasDriveLink || hasCanvaLink) && (
+              <div className="flex gap-1 mr-2">
+                {hasDriveLink && (
+                  <a
+                    href={task.driveLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs px-3 py-1.5 rounded-md bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors flex items-center gap-1"
+                  >
+                    <DriveIcon size={12} />
+                    Drive
+                  </a>
+                )}
+                {hasCanvaLink && (
+                  <a
+                    href={task.canvaLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs px-3 py-1.5 rounded-md bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors flex items-center gap-1"
+                  >
+                    <CanvaIcon size={12} />
+                    Canva
+                  </a>
+                )}
+              </div>
+            )}
             <button className="text-xs px-4 py-1.5 rounded-md bg-dark-600 text-gray-400 hover:text-white transition-colors">
               Edit
             </button>

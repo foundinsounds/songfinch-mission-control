@@ -124,3 +124,81 @@ body {
   text-transform: lowercase;
   letter-spacing: 0.03em;
 }
+
+/* Config panel slide-in animation */
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.config-panel {
+  animation: slideInFromRight 0.3s ease-out;
+}
+
+/* Temperature slider custom styling */
+.temperature-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+}
+
+.temperature-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #f97316;
+  cursor: pointer;
+  border: 2px solid #12121a;
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.4);
+  transition: box-shadow 0.2s ease;
+}
+
+.temperature-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 14px rgba(249, 115, 22, 0.6);
+}
+
+.temperature-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #f97316;
+  cursor: pointer;
+  border: 2px solid #12121a;
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.4);
+}
+
+/* Select dropdown styling for dark theme */
+select option {
+  background: #1a1a25;
+  color: #f0f0f5;
+  padding: 8px;
+}
+
+/* Focus ring for interactive elements */
+.focus-ring:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.3);
+}
+
+/* Tooltip styling */
+[title] {
+  position: relative;
+}
+
+/* Fade in animation for modals */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fixed {
+  animation: fadeIn 0.15s ease-out;
+}
