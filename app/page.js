@@ -16,6 +16,18 @@ import SettingsPanel from '../components/SettingsPanel'
 import AgentActivityView from '../components/AgentActivityView'
 import AnalyticsDashboard from '../components/AnalyticsDashboard'
 import CommandBar from '../components/CommandBar'
+import AgentChat from '../components/AgentChat'
+import CampaignPlanner from '../components/CampaignPlanner'
+import ApprovalWorkflow from '../components/ApprovalWorkflow'
+import AgentScoring from '../components/AgentScoring'
+import TemplateLibrary from '../components/TemplateLibrary'
+import WebhookManager from '../components/WebhookManager'
+import ContentCalendar from '../components/ContentCalendar'
+import AgentSkills from '../components/AgentSkills'
+import BatchOperations from '../components/BatchOperations'
+import SmartInbox from '../components/SmartInbox'
+import ABTestPipeline from '../components/ABTestPipeline'
+import CouncilIntelligence from '../components/CouncilIntelligence'
 
 export default function Roundtable() {
   const [agents, setAgents] = useState(FALLBACK_AGENTS)
@@ -31,7 +43,8 @@ export default function Roundtable() {
   const [runningAgents, setRunningAgents] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showCommandBar, setShowCommandBar] = useState(false)
-  const [currentView, setCurrentView] = useState('kanban') // 'kanban' | 'list' | 'content' | 'agents' | 'analytics'
+  const [showChat, setShowChat] = useState(false)
+  const [currentView, setCurrentView] = useState('kanban')
 
   // Settings revision counter — bumped when localStorage changes
   const [settingsRev, setSettingsRev] = useState(0)
@@ -250,6 +263,42 @@ export default function Roundtable() {
       case 'view-analytics':
         setCurrentView('analytics')
         break
+      case 'view-inbox':
+        setCurrentView('inbox')
+        break
+      case 'view-calendar':
+        setCurrentView('calendar')
+        break
+      case 'view-campaigns':
+        setCurrentView('campaigns')
+        break
+      case 'view-approvals':
+        setCurrentView('approvals')
+        break
+      case 'view-templates':
+        setCurrentView('templates')
+        break
+      case 'view-scoring':
+        setCurrentView('scoring')
+        break
+      case 'view-skills':
+        setCurrentView('skills')
+        break
+      case 'view-batch':
+        setCurrentView('batch')
+        break
+      case 'view-intelligence':
+        setCurrentView('intelligence')
+        break
+      case 'view-webhooks':
+        setCurrentView('webhooks')
+        break
+      case 'view-abtests':
+        setCurrentView('abtests')
+        break
+      case 'toggle-chat':
+        setShowChat(c => !c)
+        break
       case 'settings':
         setShowSettings(true)
         break
@@ -320,12 +369,23 @@ export default function Roundtable() {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* View Switcher */}
-          <div className="px-4 py-2 border-b border-dark-500 flex items-center gap-1 shrink-0 bg-dark-800/30">
+          <div className="px-4 py-2 border-b border-dark-500 flex items-center gap-1 shrink-0 bg-dark-800/30 overflow-x-auto">
             {[
               { key: 'kanban', label: 'Board', icon: '\u25A6' },
               { key: 'list', label: 'List', icon: '\u2630' },
+              { key: 'inbox', label: 'Inbox', icon: '\u{1F4E5}' },
               { key: 'agents', label: 'Agents', icon: '\u{1F916}' },
+              { key: 'calendar', label: 'Calendar', icon: '\u{1F4C5}' },
+              { key: 'campaigns', label: 'Campaigns', icon: '\u{1F3AF}' },
+              { key: 'approvals', label: 'Approvals', icon: '\u2705' },
               { key: 'content', label: 'Content', icon: '\u{1F4C4}' },
+              { key: 'templates', label: 'Templates', icon: '\u{1F4CB}' },
+              { key: 'abtests', label: 'A/B Tests', icon: '\u{1F9EA}' },
+              { key: 'scoring', label: 'Scoring', icon: '\u{1F3C6}' },
+              { key: 'skills', label: 'Skills', icon: '\u26A1' },
+              { key: 'batch', label: 'Batch', icon: '\u{1F4E6}' },
+              { key: 'intelligence', label: 'Intel', icon: '\u{1F9E0}' },
+              { key: 'webhooks', label: 'Webhooks', icon: '\u{1F517}' },
               { key: 'analytics', label: 'Analytics', icon: '\u{1F4CA}' },
             ].map((view) => (
               <button
@@ -374,6 +434,50 @@ export default function Roundtable() {
             )}
             {currentView === 'content' && (
               <ContentView />
+            )}
+            {currentView === 'inbox' && (
+              <SmartInbox tasks={tasks} agents={agents} onTaskClick={setSelectedTask} />
+            )}
+            {currentView === 'calendar' && (
+              <ContentCalendar tasks={tasks} agents={agents} onTaskClick={setSelectedTask} />
+            )}
+            {currentView === 'campaigns' && (
+              <CampaignPlanner tasks={tasks} agents={agents} />
+            )}
+            {currentView === 'approvals' && (
+              <ApprovalWorkflow tasks={tasks} agents={agents} onTaskClick={setSelectedTask} onApprove={handleApproveTask} />
+            )}
+            {currentView === 'templates' && (
+              <TemplateLibrary />
+            )}
+            {currentView === 'abtests' && (
+              <ABTestPipeline agents={agents} />
+            )}
+            {currentView === 'scoring' && (
+              <AgentScoring agents={agents} tasks={tasks} activity={activity} />
+            )}
+            {currentView === 'skills' && (
+              <AgentSkills agents={agents} />
+            )}
+            {currentView === 'batch' && (
+              <BatchOperations tasks={tasks} agents={agents} onTaskUpdate={async (id, updates) => {
+                try {
+                  const res = await fetch('/api/tasks/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ recordId: id, fields: updates }),
+                  })
+                  if (!res.ok) throw new Error('Update failed')
+                  setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))
+                  return true
+                } catch { return false }
+              }} />
+            )}
+            {currentView === 'intelligence' && (
+              <CouncilIntelligence agents={agents} tasks={tasks} activity={activity} />
+            )}
+            {currentView === 'webhooks' && (
+              <WebhookManager />
             )}
             {currentView === 'analytics' && (
               <AnalyticsDashboard
@@ -427,6 +531,11 @@ export default function Roundtable() {
           </a>
           <span className="opacity-40">|</span>
           <span>{agents.length} agents deployed</span>
+          <span className="opacity-40">|</span>
+          <button onClick={() => setShowChat(!showChat)}
+            className="hover:text-accent-orange transition-colors flex items-center gap-1">
+            {'\u{1F4AC}'} Chat
+          </button>
         </div>
       </footer>
 
@@ -458,6 +567,9 @@ export default function Roundtable() {
           onClose={() => setShowSettings(false)}
         />
       )}
+
+      {/* Agent Chat */}
+      <AgentChat agents={agents} isOpen={showChat} onClose={() => setShowChat(false)} />
 
       {/* Command Bar */}
       <CommandBar
