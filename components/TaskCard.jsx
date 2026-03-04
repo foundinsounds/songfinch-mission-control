@@ -59,9 +59,10 @@ function CheckIcon() {
   )
 }
 
-export default function TaskCard({ task, onClick }) {
+export default function TaskCard({ task, onClick, onQuickApprove, onRequestChanges }) {
   const agent = task.agent ? AGENTS.find(a => a.name === task.agent) : null
   const isDone = task.status === 'Done'
+  const isReview = task.status === 'Review'
   const hasDriveLink = task.driveLink && task.driveLink.length > 0
   const hasCanvaLink = task.canvaLink && task.canvaLink.length > 0
 
@@ -170,6 +171,36 @@ export default function TaskCard({ task, onClick }) {
               {p}
             </span>
           ))}
+        </div>
+      )}
+
+      {/* Review Actions — quick approve/feedback buttons */}
+      {isReview && (
+        <div className="flex gap-2 mt-2 pt-2 border-t border-dark-500">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onQuickApprove && onQuickApprove(task)
+            }}
+            className="flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold px-2 py-1.5 rounded bg-accent-green/10 text-accent-green hover:bg-accent-green/20 transition-colors border border-accent-green/20"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            Approve
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onRequestChanges ? onRequestChanges(task) : onClick()
+            }}
+            className="flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold px-2 py-1.5 rounded bg-accent-orange/10 text-accent-orange hover:bg-accent-orange/20 transition-colors border border-accent-orange/20"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            Feedback
+          </button>
         </div>
       )}
     </div>

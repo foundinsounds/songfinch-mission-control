@@ -4,6 +4,7 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
+/* ===== DARK THEME (default) ===== */
 :root {
   --bg-primary: #0a0a0f;
   --bg-secondary: #12121a;
@@ -12,12 +13,43 @@
   --border: #2a2a3a;
   --text-primary: #f0f0f5;
   --text-secondary: #8888a0;
+  --text-muted: #555570;
   --accent-green: #22c55e;
   --accent-yellow: #eab308;
   --accent-orange: #f97316;
   --accent-red: #ef4444;
   --accent-blue: #3b82f6;
   --accent-purple: #a855f7;
+  --accent-teal: #14b8a6;
+  --accent-pink: #ec4899;
+  --sidebar-bg: #12121a;
+  --header-bg: #12121a;
+  --modal-bg: #1a1a25;
+  --input-bg: #0a0a0f;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: #2a2a3a;
+  --card-shadow: rgba(0, 0, 0, 0.3);
+  --column-header-bg: rgba(18, 18, 26, 0.5);
+}
+
+/* ===== LIGHT THEME ===== */
+[data-theme="light"] {
+  --bg-primary: #f8f9fb;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-hover: #f0f1f5;
+  --border: #e2e4ea;
+  --text-primary: #1a1a2e;
+  --text-secondary: #6b6b80;
+  --text-muted: #9999aa;
+  --sidebar-bg: #ffffff;
+  --header-bg: #ffffff;
+  --modal-bg: #ffffff;
+  --input-bg: #f5f5f7;
+  --scrollbar-track: #f0f0f2;
+  --scrollbar-thumb: #ccccdd;
+  --card-shadow: rgba(0, 0, 0, 0.06);
+  --column-header-bg: #f4f5f8;
 }
 
 * {
@@ -30,6 +62,104 @@ body {
   color: var(--text-primary);
   margin: 0;
   padding: 0;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ===== LIGHT THEME OVERRIDES ===== */
+[data-theme="light"] body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .bg-dark-900 { background-color: var(--bg-primary) !important; }
+[data-theme="light"] .bg-dark-800 { background-color: var(--bg-secondary) !important; }
+[data-theme="light"] .bg-dark-700 { background-color: var(--bg-card) !important; }
+[data-theme="light"] .bg-dark-600 { background-color: var(--bg-hover) !important; }
+[data-theme="light"] .border-dark-500 { border-color: var(--border) !important; }
+[data-theme="light"] .text-gray-100 { color: var(--text-primary) !important; }
+[data-theme="light"] .text-gray-200 { color: var(--text-primary) !important; }
+[data-theme="light"] .text-gray-300 { color: var(--text-secondary) !important; }
+[data-theme="light"] .text-gray-400 { color: var(--text-secondary) !important; }
+[data-theme="light"] .text-gray-500 { color: var(--text-muted) !important; }
+[data-theme="light"] .text-gray-600 { color: var(--text-muted) !important; }
+[data-theme="light"] .text-white { color: var(--text-primary) !important; }
+
+/* Fix grey column headers in light mode */
+[data-theme="light"] .bg-dark-800\/50 {
+  background-color: var(--column-header-bg) !important;
+}
+
+[data-theme="light"] .task-card {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border) !important;
+  box-shadow: 0 1px 3px var(--card-shadow);
+}
+[data-theme="light"] .task-card:hover {
+  box-shadow: 0 4px 12px var(--card-shadow);
+  border-color: #ccc !important;
+}
+
+[data-theme="light"] .kanban-column {
+  background-color: transparent !important;
+}
+
+[data-theme="light"] select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .temperature-slider::-webkit-slider-thumb {
+  border: 2px solid var(--bg-card);
+}
+
+/* Light mode component overrides */
+[data-theme="light"] .header-bar {
+  background: var(--header-bg);
+  border-color: var(--border) !important;
+}
+
+[data-theme="light"] .footer-bar {
+  background: var(--bg-secondary);
+  border-color: var(--border) !important;
+}
+
+[data-theme="light"] .header-btn {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+}
+[data-theme="light"] .header-btn:hover {
+  background: #e4e5ea;
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .status-badge-container {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+}
+
+[data-theme="light"] .agent-item:hover {
+  background: var(--bg-hover);
+}
+
+[data-theme="light"] .settings-panel {
+  background: var(--bg-secondary) !important;
+  border-color: var(--border) !important;
+}
+
+[data-theme="light"] .roundtable-logo {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .feed-item:hover {
+  background: var(--bg-hover) !important;
+}
+
+[data-theme="light"] .feed-link {
+  color: var(--accent-blue);
+}
+[data-theme="light"] .feed-link:hover {
+  color: #2563eb;
 }
 
 /* Custom scrollbar */
@@ -38,10 +168,10 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--scrollbar-track);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
@@ -67,6 +197,14 @@ body {
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
+/* Spinner animation */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
 /* Card hover effect */
 .task-card {
   transition: all 0.2s ease;
@@ -74,8 +212,35 @@ body {
 }
 .task-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px var(--card-shadow);
   border-color: #3a3a4a;
+}
+
+/* Header bar */
+.header-bar {
+  background: var(--header-bg);
+}
+
+/* Footer bar */
+.footer-bar {
+  background: var(--bg-secondary);
+}
+
+/* Header buttons */
+.header-btn {
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+}
+.header-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* Status badge container */
+.status-badge-container {
+  background: rgba(18, 18, 26, 0.5);
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
 
 /* Column styling */
@@ -112,6 +277,17 @@ body {
 }
 .feed-item {
   animation: slideIn 0.3s ease-out;
+}
+
+/* Feed links */
+.feed-link {
+  color: var(--accent-blue);
+  text-decoration: none;
+  font-size: 0.65rem;
+  font-weight: 500;
+}
+.feed-link:hover {
+  text-decoration: underline;
 }
 
 /* Tag styling */
@@ -189,11 +365,6 @@ select option {
   box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.3);
 }
 
-/* Tooltip styling */
-[title] {
-  position: relative;
-}
-
 /* Fade in animation for modals */
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -201,4 +372,32 @@ select option {
 }
 .fixed {
   animation: fadeIn 0.15s ease-out;
+}
+
+/* Theme toggle switch */
+.theme-toggle {
+  position: relative;
+  width: 44px;
+  height: 22px;
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+.theme-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  transition: transform 0.3s ease;
+}
+[data-theme="light"] .theme-toggle-knob {
+  transform: translateX(22px);
+}
+
+/* Roundtable Logo styling */
+.roundtable-logo {
+  color: var(--text-primary);
+  transition: color 0.3s ease;
 }

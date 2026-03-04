@@ -1,8 +1,52 @@
 'use client'
 
+import { useState, useEffect } from 'react'
+import { CRON_INTERVAL_MINUTES } from '../lib/constants'
+
+function useNextRunCountdown() {
+  const [timeLeft, setTimeLeft] = useState('')
+
+  useEffect(() => {
+    function calc() {
+      const now = new Date()
+      const next = new Date(now)
+      next.setMinutes(next.getMinutes() - (next.getMinutes() % CRON_INTERVAL_MINUTES) + CRON_INTERVAL_MINUTES)
+      next.setSeconds(0)
+      next.setMilliseconds(0)
+
+      const diff = next - now
+      if (diff <= 0) return 'now'
+      const mins = Math.floor(diff / 60000)
+      const secs = Math.floor((diff % 60000) / 1000)
+      return `${mins}m ${secs.toString().padStart(2, '0')}s`
+    }
+
+    setTimeLeft(calc())
+    const interval = setInterval(() => setTimeLeft(calc()), 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  return timeLeft
+}
+
 export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onConfigAgent, tasks }) {
+  const nextRun = useNextRunCountdown()
+
   const getAgentTaskCount = (agentName) => {
     return tasks.filter(t => t.agent === agentName && t.status !== 'Done').length
+  }
+
+  const getAgentOutputStats = (agentName) => {
+    const agentTasks = tasks.filter(t => t.agent === agentName)
+    const done = agentTasks.filter(t => t.status === 'Done').length
+    const totalChars = agentTasks
+      .filter(t => t.output && t.status === 'Done')
+      .reduce((sum, t) => sum + t.output.length, 0)
+    return { done, totalChars }
+  }
+
+  const getAssignedCount = (agentName) => {
+    return tasks.filter(t => t.agent === agentName && t.status === 'Assigned').length
   }
 
   const getStatusColor = (status) => {
@@ -60,6 +104,8 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onC
         {agents.map((agent) => {
           const typeBadge = getTypeBadge(agent.type)
           const taskCount = getAgentTaskCount(agent.name)
+          const assignedCount = getAssignedCount(agent.name)
+          const outputStats = getAgentOutputStats(agent.name)
           const isSelected = selectedAgent === agent.name
 
           return (
@@ -98,6 +144,18 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onC
                     </span>
                   </div>
                   <div className="text-[11px] text-gray-500 truncate">{agent.role}</div>
+                  {/* Output stats row */}
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {outputStats.done > 0 && (
+                      <span className="text-[9px] text-green-500/70 font-mono">{outputStats.done} done</span>
+                    )}
+                    {outputStats.totalChars > 0 && (
+                      <span className="text-[9px] text-gray-600 font-mono">{Math.round(outputStats.totalChars / 1000)}k chars</span>
+                    )}
+                    {assignedCount > 0 && (
+                      <span className="text-[9px] text-yellow-500/70 font-mono">{assignedCount} queued</span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Status + Config */}
@@ -131,11 +189,27 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onC
       </div>
 
       {/* Sidebar Footer */}
-      <div className="px-4 py-3 border-t border-dark-500">
+      <div className="px-4 py-3 border-t border-dark-500 space-y-1.5">
+        <div className="flex items-center justify-between text-[11px] text-gray-500">
+          <span className="flex items-center gap-1.5">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-orange">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            Next Run
+          </span>
+          <span className="text-accent-orange font-semibold font-mono text-[10px]">{nextRun}</span>
+        </div>
         <div className="flex items-center justify-between text-[11px] text-gray-500">
           <span>Total Completed</span>
           <span className="text-accent-green font-semibold">
             {agents.reduce((sum, a) => sum + a.tasksCompleted, 0)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-[11px] text-gray-500">
+          <span>Total Output</span>
+          <span className="text-gray-400 font-semibold font-mono text-[10px]">
+            {Math.round(tasks.filter(t => t.output && t.status === 'Done').reduce((s, t) => s + t.output.length, 0) / 1000)}k chars
           </span>
         </div>
       </div>

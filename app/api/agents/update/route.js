@@ -23,11 +23,22 @@ export async function POST(request) {
     }
 
     // Map frontend field names to Airtable field names
+    // Only include fields that have values to avoid Airtable errors with undefined
     const airtableFields = {}
-    if (fields.status !== undefined) airtableFields['Status'] = fields.status
-    if (fields.model !== undefined) airtableFields['Model'] = fields.model
-    if (fields.temperature !== undefined) airtableFields['Temperature'] = fields.temperature
-    if (fields.systemPrompt !== undefined) airtableFields['System Prompt'] = fields.systemPrompt
+    if (fields.status !== undefined && fields.status !== null) {
+      airtableFields['Status'] = fields.status
+    }
+    if (fields.model !== undefined && fields.model !== null) {
+      airtableFields['Model'] = fields.model
+    }
+    if (fields.temperature !== undefined && fields.temperature !== null) {
+      airtableFields['Temperature'] = parseFloat(fields.temperature)
+    }
+    if (fields.systemPrompt !== undefined && fields.systemPrompt !== null) {
+      airtableFields['System Prompt'] = fields.systemPrompt
+    }
+
+    console.log(`[AGENT UPDATE] Updating ${recordId}:`, Object.keys(airtableFields))
 
     const result = await updateAgent(recordId, airtableFields)
 
@@ -36,9 +47,10 @@ export async function POST(request) {
       record: result,
     })
   } catch (error) {
-    console.error('Agent update error:', error)
+    console.error('Agent update error:', error.message)
+    // Return the actual Airtable error message for debugging
     return NextResponse.json(
-      { error: error.message },
+      { error: error.message, details: 'Check Airtable field names: Status, Model, Temperature, System Prompt' },
       { status: 500 }
     )
   }

@@ -21,6 +21,9 @@ const TYPE_STYLES = {
   'Review Needed': { dot: 'bg-orange-400', text: 'text-orange-400', icon: '\u{1F50D}' },
   'Approved': { dot: 'bg-green-400', text: 'text-green-400', icon: '\u{1F389}' },
   'Comment': { dot: 'bg-gray-400', text: 'text-gray-400', icon: '\u{1F4AC}' },
+  'Started': { dot: 'bg-blue-400', text: 'text-blue-400', icon: '\u26A1' },
+  'System': { dot: 'bg-gray-400', text: 'text-gray-400', icon: '\u2699\uFE0F' },
+  'Error': { dot: 'bg-red-400', text: 'text-red-400', icon: '\u274C' },
 }
 
 const ACTION_LABELS = {
@@ -30,9 +33,62 @@ const ACTION_LABELS = {
   'submitted for review': { label: 'IN REVIEW', color: 'text-accent-orange bg-orange-500/10' },
   'completed research': { label: 'RESEARCH', color: 'text-accent-teal bg-teal-500/10' },
   'created campaign': { label: 'NEW CAMPAIGN', color: 'text-accent-purple bg-purple-500/10' },
+  'scanned': { label: 'SCAN', color: 'text-gray-400 bg-gray-500/10' },
+  'completed run': { label: 'RUN DONE', color: 'text-accent-green bg-green-500/10' },
+  'error': { label: 'ERROR', color: 'text-accent-red bg-red-500/10' },
 }
 
 const FILTERS = ['All', 'Tasks', 'Comments', 'Docs', 'Status']
+
+/**
+ * Extract links from activity details text
+ * Looks for URLs or markdown-style links
+ */
+function extractLinks(text) {
+  if (!text) return { cleanText: text, links: [] }
+
+  const links = []
+  // Match markdown links [text](url)
+  let cleanText = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) => {
+    links.push({ label, url })
+    return label
+  })
+  // Match standalone URLs
+  cleanText = cleanText.replace(/(https?:\/\/[^\s,)]+)/g, (url) => {
+    if (!links.find(l => l.url === url)) {
+      links.push({ label: 'View', url })
+    }
+    return ''
+  })
+
+  return { cleanText: cleanText.trim(), links }
+}
+
+/**
+ * Extract reasoning/impact sections from details
+ * Agent runner formats details with WHY: and IMPACT: prefixes
+ */
+function parseDetails(details) {
+  if (!details) return { summary: '', reasoning: '', impact: '', links: [] }
+
+  const { cleanText, links } = extractLinks(details)
+
+  // Try to split on WHY: / IMPACT: markers
+  const whyMatch = cleanText.match(/(?:^|\n)\s*(?:WHY|Reasoning|Rationale):\s*(.+?)(?=\n\s*(?:IMPACT|Impact)|$)/is)
+  const impactMatch = cleanText.match(/(?:^|\n)\s*(?:IMPACT|Impact|Result):\s*(.+?)$/is)
+
+  if (whyMatch || impactMatch) {
+    const summary = cleanText.replace(/(?:WHY|Reasoning|Rationale|IMPACT|Impact|Result):\s*.+/gis, '').trim()
+    return {
+      summary,
+      reasoning: whyMatch ? whyMatch[1].trim() : '',
+      impact: impactMatch ? impactMatch[1].trim() : '',
+      links,
+    }
+  }
+
+  return { summary: cleanText, reasoning: '', impact: '', links }
+}
 
 export default function LiveFeed({ activity, filter, onFilterChange }) {
   return (
@@ -67,10 +123,18 @@ export default function LiveFeed({ activity, filter, onFilterChange }) {
 
       {/* Activity Items */}
       <div className="flex-1 overflow-y-auto">
-        {activity.map((item, index) => {
+        {activity.length === 0 && (
+          <div className="px-4 py-8 text-center">
+            <div className="text-2xl mb-2">&#9203;</div>
+            <p className="text-[12px] text-gray-500">Waiting for agent activity...</p>
+            <p className="text-[10px] text-gray-600 mt-1">Click "Run Agents" to trigger agents</p>
+          </div>
+        )}
+        {activity.map((item) => {
           const agent = AGENTS.find(a => a.name === item.agent)
           const style = TYPE_STYLES[item.type] || TYPE_STYLES['Comment']
           const actionLabel = ACTION_LABELS[item.action]
+          const parsed = parseDetails(item.details)
 
           return (
             <div
@@ -104,6 +168,11 @@ export default function LiveFeed({ activity, filter, onFilterChange }) {
                         {agent.name}
                       </span>
                     )}
+                    {!agent && item.agent && (
+                      <span className="text-[11px] font-bold text-gray-400">
+                        {item.agent}
+                      </span>
+                    )}
                     <span className="text-[11px] text-gray-500">{item.action}</span>
                     {actionLabel && (
                       <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider ${actionLabel.color}`}>
@@ -117,11 +186,50 @@ export default function LiveFeed({ activity, filter, onFilterChange }) {
                     &ldquo;{item.task}&rdquo;
                   </p>
 
-                  {/* Details */}
-                  {item.details && (
+                  {/* Summary / Details */}
+                  {parsed.summary && (
                     <p className="text-[11px] text-gray-500 mt-1 leading-relaxed line-clamp-2">
-                      {item.details}
+                      {parsed.summary}
                     </p>
+                  )}
+
+                  {/* Reasoning (WHY) */}
+                  {parsed.reasoning && (
+                    <div className="mt-1.5 pl-2 border-l-2 border-accent-blue/30">
+                      <p className="text-[10px] text-accent-blue/80 font-medium uppercase tracking-wider mb-0.5">Why</p>
+                      <p className="text-[11px] text-gray-400 leading-relaxed line-clamp-2">{parsed.reasoning}</p>
+                    </div>
+                  )}
+
+                  {/* Impact */}
+                  {parsed.impact && (
+                    <div className="mt-1.5 pl-2 border-l-2 border-accent-green/30">
+                      <p className="text-[10px] text-accent-green/80 font-medium uppercase tracking-wider mb-0.5">Impact</p>
+                      <p className="text-[11px] text-gray-400 leading-relaxed line-clamp-2">{parsed.impact}</p>
+                    </div>
+                  )}
+
+                  {/* Links */}
+                  {parsed.links.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-1.5">
+                      {parsed.links.map((link, i) => (
+                        <a
+                          key={i}
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="feed-link text-[10px] font-medium text-accent-blue hover:underline flex items-center gap-1"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                          {link.label}
+                        </a>
+                      ))}
+                    </div>
                   )}
 
                   {/* Type Badge + Timestamp */}

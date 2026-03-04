@@ -10,7 +10,7 @@ const COLUMNS = [
   { key: 'Done', label: 'DONE', dotColor: 'bg-accent-green', icon: '\u2705' },
 ]
 
-export default function KanbanBoard({ tasks, onTaskClick }) {
+export default function KanbanBoard({ tasks, onTaskClick, onQuickApprove, onRequestChanges }) {
   return (
     <div className="flex gap-0 h-full">
       {COLUMNS.map((col) => {
@@ -52,6 +52,8 @@ export default function KanbanBoard({ tasks, onTaskClick }) {
                   key={task.id}
                   task={task}
                   onClick={() => onTaskClick(task)}
+                  onQuickApprove={onQuickApprove}
+                  onRequestChanges={onRequestChanges}
                 />
               ))}
 

@@ -3,25 +3,60 @@
 import { useState, useEffect, useCallback } from 'react'
 import { AGENTS as FALLBACK_AGENTS } from '../lib/agents'
 import { MOCK_TASKS, MOCK_ACTIVITY } from '../lib/mockData'
-import { GOOGLE_DRIVE_FOLDER, AIRTABLE_BASE_URL, VERSION } from '../lib/constants'
+import { GOOGLE_DRIVE_FOLDER, AIRTABLE_BASE_URL, VERSION, COUNCIL_NAME } from '../lib/constants'
 import AgentSidebar from '../components/AgentSidebar'
 import AgentConfigPanel from '../components/AgentConfigPanel'
 import KanbanBoard from '../components/KanbanBoard'
+import ListView from '../components/ListView'
+import ContentView from '../components/ContentView'
 import LiveFeed from '../components/LiveFeed'
 import StatsHeader from '../components/StatsHeader'
 import TaskModal from '../components/TaskModal'
+import SettingsPanel from '../components/SettingsPanel'
+import AgentActivityView from '../components/AgentActivityView'
+import AnalyticsDashboard from '../components/AnalyticsDashboard'
+import CommandBar from '../components/CommandBar'
 
-export default function MissionControl() {
+export default function Roundtable() {
   const [agents, setAgents] = useState(FALLBACK_AGENTS)
   const [tasks, setTasks] = useState(MOCK_TASKS)
   const [activity, setActivity] = useState(MOCK_ACTIVITY)
   const [selectedAgent, setSelectedAgent] = useState(null)
-  const [configAgent, setConfigAgent] = useState(null) // Agent being configured
+  const [configAgent, setConfigAgent] = useState(null)
   const [selectedTask, setSelectedTask] = useState(null)
   const [currentTime, setCurrentTime] = useState(new Date())
   const [feedFilter, setFeedFilter] = useState('All')
-  const [dataSource, setDataSource] = useState('loading') // 'airtable' | 'mock' | 'loading'
+  const [dataSource, setDataSource] = useState('loading')
   const [lastSync, setLastSync] = useState(null)
+  const [runningAgents, setRunningAgents] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [showCommandBar, setShowCommandBar] = useState(false)
+  const [currentView, setCurrentView] = useState('kanban') // 'kanban' | 'list' | 'content' | 'agents' | 'analytics'
+
+  // Theme state
+  const [theme, setTheme] = useState('dark')
+
+  // Initialize theme from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('roundtable-theme') || 'dark'
+    setTheme(saved)
+    document.documentElement.setAttribute('data-theme', saved)
+  }, [])
+
+  // Toggle theme
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => {
+      const next = prev === 'dark' ? 'light' : 'dark'
+      localStorage.setItem('roundtable-theme', next)
+      document.documentElement.setAttribute('data-theme', next)
+      if (next === 'light') {
+        document.documentElement.classList.add('light')
+      } else {
+        document.documentElement.classList.remove('light')
+      }
+      return next
+    })
+  }, [])
 
   // Fetch live data from Airtable
   const fetchData = useCallback(async () => {
@@ -66,6 +101,132 @@ export default function MissionControl() {
     setAgents(prev => prev.map(a => a.id === updatedAgent.id ? { ...a, ...updatedAgent } : a))
   }, [])
 
+  // Handle task approval
+  const handleApproveTask = useCallback(async (task) => {
+    try {
+      const res = await fetch('/api/tasks/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordId: task.id,
+          fields: { Status: 'Done' },
+          taskContext: {
+            output: task.output,
+            contentType: task.contentType,
+            platform: Array.isArray(task.platform) ? task.platform.join(', ') : (task.platform || ''),
+            agent: task.agent,
+            campaign: task.campaign,
+          },
+        }),
+      })
+
+      if (!res.ok) throw new Error('Failed to approve task')
+
+      setTasks(prev => prev.map(t =>
+        t.id === task.id ? { ...t, status: 'Done' } : t
+      ))
+      setSelectedTask(null)
+      setTimeout(fetchData, 1000)
+      return true
+    } catch (err) {
+      console.error('Failed to approve task:', err)
+      return false
+    }
+  }, [fetchData])
+
+  // Handle task status update
+  const handleUpdateTaskStatus = useCallback(async (task, newStatus) => {
+    try {
+      const res = await fetch('/api/tasks/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordId: task.id,
+          fields: { Status: newStatus },
+        }),
+      })
+
+      if (!res.ok) throw new Error('Failed to update task status')
+
+      setTasks(prev => prev.map(t =>
+        t.id === task.id ? { ...t, status: newStatus } : t
+      ))
+      setTimeout(fetchData, 1000)
+      return true
+    } catch (err) {
+      console.error('Failed to update task:', err)
+      return false
+    }
+  }, [fetchData])
+
+  // Run Agents — trigger the cron endpoint manually
+  const handleRunAgents = useCallback(async () => {
+    setRunningAgents(true)
+    try {
+      const res = await fetch('/api/cron/run-agents')
+      const data = await res.json()
+      console.log('[Roundtable] Agent run result:', data)
+      // Refresh data after agents run
+      setTimeout(fetchData, 2000)
+    } catch (err) {
+      console.error('Failed to run agents:', err)
+    } finally {
+      setTimeout(() => setRunningAgents(false), 3000)
+    }
+  }, [fetchData])
+
+  // Command Bar handler
+  const handleCommand = useCallback((command, entity) => {
+    switch (command) {
+      case 'open-command-bar':
+        setShowCommandBar(true)
+        break
+      case 'run-agents':
+        handleRunAgents()
+        break
+      case 'view-kanban':
+        setCurrentView('kanban')
+        break
+      case 'view-list':
+        setCurrentView('list')
+        break
+      case 'view-agents':
+        setCurrentView('agents')
+        break
+      case 'view-content':
+        setCurrentView('content')
+        break
+      case 'view-analytics':
+        setCurrentView('analytics')
+        break
+      case 'settings':
+        setShowSettings(true)
+        break
+      case 'refresh':
+        fetchData()
+        break
+      case 'filter-review':
+        setCurrentView('list')
+        // Select review tasks by filtering
+        break
+      case 'filter-done':
+        setCurrentView('list')
+        break
+      case 'open-task':
+        if (entity) {
+          const task = tasks.find(t => t.id === entity)
+          if (task) setSelectedTask(task)
+        }
+        break
+      case 'create-task':
+        // Future: open create task modal
+        console.log('[Command] Create task:', entity)
+        break
+      default:
+        console.log('[Command]', command, entity)
+    }
+  }, [handleRunAgents, fetchData, tasks])
+
   const filteredTasks = selectedAgent
     ? tasks.filter(t => t.agent === selectedAgent)
     : tasks
@@ -88,6 +249,11 @@ export default function MissionControl() {
         currentTime={currentTime}
         dataSource={dataSource}
         lastSync={lastSync}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onRunAgents={handleRunAgents}
+        runningAgents={runningAgents}
+        onOpenSettings={() => setShowSettings(true)}
       />
 
       {/* Main Content */}
@@ -101,12 +267,68 @@ export default function MissionControl() {
           tasks={tasks}
         />
 
-        {/* Kanban Board */}
-        <div className="flex-1 overflow-x-auto">
-          <KanbanBoard
-            tasks={filteredTasks}
-            onTaskClick={setSelectedTask}
-          />
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* View Switcher */}
+          <div className="px-4 py-2 border-b border-dark-500 flex items-center gap-1 shrink-0 bg-dark-800/30">
+            {[
+              { key: 'kanban', label: 'Board', icon: '\u25A6' },
+              { key: 'list', label: 'List', icon: '\u2630' },
+              { key: 'agents', label: 'Agents', icon: '\u{1F916}' },
+              { key: 'content', label: 'Content', icon: '\u{1F4C4}' },
+              { key: 'analytics', label: 'Analytics', icon: '\u{1F4CA}' },
+            ].map((view) => (
+              <button
+                key={view.key}
+                onClick={() => setCurrentView(view.key)}
+                className={`text-[11px] px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
+                  currentView === view.key
+                    ? 'bg-accent-orange/15 text-accent-orange border border-accent-orange/25 font-semibold'
+                    : 'text-gray-500 hover:text-gray-300 hover:bg-dark-600'
+                }`}
+              >
+                <span>{view.icon}</span>
+                {view.label}
+              </button>
+            ))}
+          </div>
+
+          {/* View Content */}
+          <div className="flex-1 overflow-auto">
+            {currentView === 'kanban' && (
+              <KanbanBoard
+                tasks={filteredTasks}
+                onTaskClick={setSelectedTask}
+                onQuickApprove={handleApproveTask}
+                onRequestChanges={(task) => setSelectedTask(task)}
+              />
+            )}
+            {currentView === 'list' && (
+              <ListView
+                tasks={filteredTasks}
+                onTaskClick={setSelectedTask}
+                onQuickApprove={handleApproveTask}
+              />
+            )}
+            {currentView === 'agents' && (
+              <AgentActivityView
+                agents={agents}
+                tasks={tasks}
+                activity={activity}
+                onAgentClick={(agent) => setConfigAgent(agent)}
+              />
+            )}
+            {currentView === 'content' && (
+              <ContentView />
+            )}
+            {currentView === 'analytics' && (
+              <AnalyticsDashboard
+                agents={agents}
+                tasks={tasks}
+                activity={activity}
+              />
+            )}
+          </div>
         </div>
 
         {/* Live Feed */}
@@ -118,9 +340,9 @@ export default function MissionControl() {
       </div>
 
       {/* Footer */}
-      <footer className="bg-dark-800 border-t border-dark-500 px-6 py-2 flex items-center justify-between shrink-0">
+      <footer className="footer-bar border-t border-dark-500 px-6 py-2 flex items-center justify-between shrink-0">
         <div className="text-[11px] text-gray-600">
-          Songfinch Mission Control {VERSION}
+          Roundtable {VERSION} — {COUNCIL_NAME}
         </div>
         <div className="flex items-center gap-4 text-[11px] text-gray-600">
           <a
@@ -149,7 +371,7 @@ export default function MissionControl() {
             </svg>
             Airtable
           </a>
-          <span>|</span>
+          <span className="opacity-40">|</span>
           <span>{agents.length} agents deployed</span>
         </div>
       </footer>
@@ -160,6 +382,8 @@ export default function MissionControl() {
           task={selectedTask}
           agent={agents.find(a => a.name === selectedTask.agent)}
           onClose={() => setSelectedTask(null)}
+          onApprove={handleApproveTask}
+          onUpdateStatus={handleUpdateTaskStatus}
         />
       )}
 
@@ -171,6 +395,23 @@ export default function MissionControl() {
           onAgentUpdate={handleAgentUpdate}
         />
       )}
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <SettingsPanel
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {/* Command Bar */}
+      <CommandBar
+        isOpen={showCommandBar}
+        onClose={() => setShowCommandBar(false)}
+        onCommand={handleCommand}
+        tasks={tasks}
+      />
     </div>
   )
 }
