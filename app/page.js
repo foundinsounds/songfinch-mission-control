@@ -46,6 +46,7 @@ export default function Roundtable() {
   const [showCommandBar, setShowCommandBar] = useState(false)
   const [showChat, setShowChat] = useState(false)
   const [currentView, setCurrentView] = useState('kanban')
+  const [feedCollapsed, setFeedCollapsed] = useState(false)
 
   // Settings revision counter — bumped when localStorage changes
   const [settingsRev, setSettingsRev] = useState(0)
@@ -463,6 +464,8 @@ export default function Roundtable() {
           activity={activity}
           filter={feedFilter}
           onFilterChange={setFeedFilter}
+          collapsed={feedCollapsed}
+          onToggleCollapse={() => setFeedCollapsed(c => !c)}
         />
       </div>
 
@@ -516,6 +519,19 @@ export default function Roundtable() {
           onClose={() => setSelectedTask(null)}
           onApprove={handleApproveTask}
           onUpdateStatus={handleUpdateTaskStatus}
+          onEditTask={async (task, updates) => {
+            try {
+              const res = await fetch('/api/tasks/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recordId: task.id, fields: updates }),
+              })
+              if (!res.ok) throw new Error('Update failed')
+              setTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...Object.fromEntries(Object.entries(updates).map(([k, v]) => [k === 'Name' ? 'name' : k === 'Description' ? 'description' : k === 'Content Type' ? 'contentType' : k === 'Priority' ? 'priority' : k, v])) } : t))
+              setTimeout(fetchData, 1000)
+              return true
+            } catch { return false }
+          }}
         />
       )}
 

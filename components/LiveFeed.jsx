@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useMemo } from 'react'
 import { AGENTS } from '../lib/agents'
 
 function timeAgo(dateStr) {
@@ -40,57 +41,63 @@ const ACTION_LABELS = {
 
 const FILTERS = ['All', 'Tasks', 'Comments', 'Docs', 'Status']
 
-/**
- * Extract links from activity details text
- * Looks for URLs or markdown-style links
- */
 function extractLinks(text) {
   if (!text) return { cleanText: text, links: [] }
-
   const links = []
-  // Match markdown links [text](url)
   let cleanText = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) => {
     links.push({ label, url })
     return label
   })
-  // Match standalone URLs
   cleanText = cleanText.replace(/(https?:\/\/[^\s,)]+)/g, (url) => {
     if (!links.find(l => l.url === url)) {
       links.push({ label: 'View', url })
     }
     return ''
   })
-
   return { cleanText: cleanText.trim(), links }
 }
 
-/**
- * Extract reasoning/impact sections from details
- * Agent runner formats details with WHY: and IMPACT: prefixes
- */
 function parseDetails(details) {
   if (!details) return { summary: '', reasoning: '', impact: '', links: [] }
-
   const { cleanText, links } = extractLinks(details)
-
-  // Try to split on WHY: / IMPACT: markers
   const whyMatch = cleanText.match(/(?:^|\n)\s*(?:WHY|Reasoning|Rationale):\s*(.+?)(?=\n\s*(?:IMPACT|Impact)|$)/is)
   const impactMatch = cleanText.match(/(?:^|\n)\s*(?:IMPACT|Impact|Result):\s*(.+?)$/is)
-
   if (whyMatch || impactMatch) {
     const summary = cleanText.replace(/(?:WHY|Reasoning|Rationale|IMPACT|Impact|Result):\s*.+/gis, '').trim()
-    return {
-      summary,
-      reasoning: whyMatch ? whyMatch[1].trim() : '',
-      impact: impactMatch ? impactMatch[1].trim() : '',
-      links,
-    }
+    return { summary, reasoning: whyMatch ? whyMatch[1].trim() : '', impact: impactMatch ? impactMatch[1].trim() : '', links }
   }
-
   return { summary: cleanText, reasoning: '', impact: '', links }
 }
 
-export default function LiveFeed({ activity, filter, onFilterChange }) {
+export default function LiveFeed({ activity, filter, onFilterChange, collapsed, onToggleCollapse }) {
+  // Sort newest first
+  const sortedActivity = useMemo(() => {
+    return [...activity].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+  }, [activity])
+
+  if (collapsed) {
+    return (
+      <aside className="w-10 bg-dark-800 border-l border-dark-500 flex flex-col items-center py-3 shrink-0">
+        <button
+          onClick={onToggleCollapse}
+          className="text-gray-500 hover:text-accent-orange transition-colors p-1 mb-2"
+          title="Expand Live Feed"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M15 18l-6-6 6-6"/>
+          </svg>
+        </button>
+        <div className="w-2 h-2 rounded-full bg-accent-green pulse-dot mb-2"></div>
+        <div className="writing-mode-vertical text-[9px] text-gray-600 font-semibold tracking-wider uppercase" style={{ writingMode: 'vertical-rl' }}>
+          LIVE FEED
+        </div>
+        {activity.length > 0 && (
+          <div className="mt-auto text-[9px] text-gray-600 font-bold">{activity.length}</div>
+        )}
+      </aside>
+    )
+  }
+
   return (
     <aside className="w-80 bg-dark-800 border-l border-dark-500 flex flex-col shrink-0 overflow-hidden">
       {/* Feed Header */}
@@ -101,6 +108,15 @@ export default function LiveFeed({ activity, filter, onFilterChange }) {
           <span className="text-[10px] bg-dark-600 px-2 py-0.5 rounded-full text-gray-500 ml-auto">
             {activity.length} events
           </span>
+          <button
+            onClick={onToggleCollapse}
+            className="text-gray-500 hover:text-accent-orange transition-colors p-1"
+            title="Collapse Live Feed"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </button>
         </div>
 
         {/* Filter Tabs */}
@@ -121,16 +137,16 @@ export default function LiveFeed({ activity, filter, onFilterChange }) {
         </div>
       </div>
 
-      {/* Activity Items */}
+      {/* Activity Items — sorted newest first */}
       <div className="flex-1 overflow-y-auto">
-        {activity.length === 0 && (
+        {sortedActivity.length === 0 && (
           <div className="px-4 py-8 text-center">
             <div className="text-2xl mb-2">&#9203;</div>
             <p className="text-[12px] text-gray-500">Waiting for agent activity...</p>
             <p className="text-[10px] text-gray-600 mt-1">Click "Run Agents" to trigger agents</p>
           </div>
         )}
-        {activity.map((item) => {
+        {sortedActivity.map((item) => {
           const agent = AGENTS.find(a => a.name === item.agent)
           const style = TYPE_STYLES[item.type] || TYPE_STYLES['Comment']
           const actionLabel = ACTION_LABELS[item.action]
@@ -141,9 +157,7 @@ export default function LiveFeed({ activity, filter, onFilterChange }) {
               key={item.id}
               className="feed-item px-4 py-3 border-b border-dark-500/50 hover:bg-dark-700/50 transition-colors cursor-pointer"
             >
-              {/* Agent + Action Header */}
               <div className="flex items-start gap-2.5 mb-1.5">
-                {/* Agent Avatar mini */}
                 {agent ? (
                   <div
                     className="w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 mt-0.5"
@@ -161,17 +175,12 @@ export default function LiveFeed({ activity, filter, onFilterChange }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {agent && (
-                      <span
-                        className="text-[11px] font-bold"
-                        style={{ color: agent.color }}
-                      >
+                      <span className="text-[11px] font-bold" style={{ color: agent.color }}>
                         {agent.name}
                       </span>
                     )}
                     {!agent && item.agent && (
-                      <span className="text-[11px] font-bold text-gray-400">
-                        {item.agent}
-                      </span>
+                      <span className="text-[11px] font-bold text-gray-400">{item.agent}</span>
                     )}
                     <span className="text-[11px] text-gray-500">{item.action}</span>
                     {actionLabel && (
@@ -181,19 +190,16 @@ export default function LiveFeed({ activity, filter, onFilterChange }) {
                     )}
                   </div>
 
-                  {/* Task Name */}
                   <p className="text-[12px] font-medium text-gray-200 mt-1 leading-tight">
                     &ldquo;{item.task}&rdquo;
                   </p>
 
-                  {/* Summary / Details */}
                   {parsed.summary && (
                     <p className="text-[11px] text-gray-500 mt-1 leading-relaxed line-clamp-2">
                       {parsed.summary}
                     </p>
                   )}
 
-                  {/* Reasoning (WHY) */}
                   {parsed.reasoning && (
                     <div className="mt-1.5 pl-2 border-l-2 border-accent-blue/30">
                       <p className="text-[10px] text-accent-blue/80 font-medium uppercase tracking-wider mb-0.5">Why</p>
@@ -201,7 +207,6 @@ export default function LiveFeed({ activity, filter, onFilterChange }) {
                     </div>
                   )}
 
-                  {/* Impact */}
                   {parsed.impact && (
                     <div className="mt-1.5 pl-2 border-l-2 border-accent-green/30">
                       <p className="text-[10px] text-accent-green/80 font-medium uppercase tracking-wider mb-0.5">Impact</p>
@@ -209,7 +214,6 @@ export default function LiveFeed({ activity, filter, onFilterChange }) {
                     </div>
                   )}
 
-                  {/* Links */}
                   {parsed.links.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-1.5">
                       {parsed.links.map((link, i) => (
@@ -232,7 +236,6 @@ export default function LiveFeed({ activity, filter, onFilterChange }) {
                     </div>
                   )}
 
-                  {/* Type Badge + Timestamp */}
                   <div className="flex items-center gap-2 mt-1.5">
                     <span className={`text-[9px] font-semibold uppercase tracking-wider ${style.text}`}>
                       {style.icon} {item.type}

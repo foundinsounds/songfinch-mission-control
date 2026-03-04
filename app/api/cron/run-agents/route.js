@@ -78,11 +78,14 @@ function findBestAgent(task, agents) {
 }
 
 async function autoAssignInboxTasks(tasks, agents) {
-  const inboxTasks = tasks.filter(t => t.status === 'Inbox' && !t.agent)
+  // Pick up ALL inbox tasks — even those that already have an agent assigned
+  // (they may have been pushed back to Inbox and need reassignment)
+  const inboxTasks = tasks.filter(t => t.status === 'Inbox')
   const assigned = []
 
   for (const task of inboxTasks) {
-    const agentName = findBestAgent(task, agents)
+    // If the task already has an agent, keep it; otherwise, find the best one
+    const agentName = task.agent || findBestAgent(task, agents)
     try {
       await updateTask(task.id, { 'Status': 'Assigned', 'Agent': agentName })
       await addActivity({

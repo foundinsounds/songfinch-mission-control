@@ -191,7 +191,7 @@ function getLatestOutput(raw) {
   return idx >= 0 ? raw.substring(0, idx).trim() : raw.trim()
 }
 
-export default function TaskModal({ task, agent, onClose, onApprove, onUpdateStatus, onFeedback }) {
+export default function TaskModal({ task, agent, onClose, onApprove, onUpdateStatus, onFeedback, onEditTask }) {
   const [approving, setApproving] = useState(false)
   const [approveStatus, setApproveStatus] = useState(null) // 'success' | 'error' | null
   const [feedbackText, setFeedbackText] = useState('')
@@ -201,6 +201,30 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
   const [showRevisionHistory, setShowRevisionHistory] = useState(false)
   const [diffViewMode, setDiffViewMode] = useState('inline') // 'inline' | 'side-by-side' | 'raw'
   const [diffVersionIndex, setDiffVersionIndex] = useState(0) // which revision to compare against latest
+  const [isEditing, setIsEditing] = useState(false)
+  const [editFields, setEditFields] = useState({ name: task.name || '', description: task.description || '', contentType: task.contentType || '', priority: task.priority || 'Medium' })
+  const [saving, setSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState(null)
+
+  const isEditable = task.status === 'In Progress' || task.status === 'Assigned' || task.status === 'Inbox'
+
+  const handleSaveEdit = async () => {
+    if (!onEditTask) return
+    setSaving(true)
+    setSaveStatus(null)
+    try {
+      const updates = {}
+      if (editFields.name !== task.name) updates['Name'] = editFields.name
+      if (editFields.description !== task.description) updates['Description'] = editFields.description
+      if (editFields.contentType !== task.contentType) updates['Content Type'] = editFields.contentType
+      if (editFields.priority !== task.priority) updates['Priority'] = editFields.priority
+      if (Object.keys(updates).length === 0) { setIsEditing(false); setSaving(false); return }
+      const success = await onEditTask(task, updates)
+      if (success) { setSaveStatus('success'); setTimeout(() => { setIsEditing(false); setSaveStatus(null) }, 800) }
+      else setSaveStatus('error')
+    } catch { setSaveStatus('error') }
+    finally { setSaving(false) }
+  }
 
   const hasDriveLink = task.driveLink && task.driveLink.length > 0
   const hasCanvaLink = task.canvaLink && task.canvaLink.length > 0
@@ -311,7 +335,17 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
                 </span>
               )}
             </div>
-            <h2 className="text-lg font-bold text-gray-100">{task.name}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-gray-100">{task.name}</h2>
+              {isEditable && !isEditing && (
+                <button onClick={() => setIsEditing(true)} className="text-gray-500 hover:text-accent-orange transition-colors p-1" title="Edit task">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -351,6 +385,53 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
               <span className="text-sm font-semibold">Feedback submitted! Agent will revise on next run.</span>
+            </div>
+          )}
+
+          {/* Edit Form */}
+          {isEditing && (
+            <div className="mb-5 p-4 bg-dark-600 rounded-lg border border-accent-orange/30 space-y-3">
+              <h3 className="text-xs font-semibold text-accent-orange uppercase tracking-wider">Edit Task</h3>
+              <div>
+                <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Name</label>
+                <input value={editFields.name} onChange={e => setEditFields({ ...editFields, name: e.target.value })}
+                  className="w-full bg-dark-900 border border-dark-500 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-accent-orange/50" />
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Description</label>
+                <textarea value={editFields.description} onChange={e => setEditFields({ ...editFields, description: e.target.value })}
+                  className="w-full bg-dark-900 border border-dark-500 rounded px-3 py-2 text-sm text-gray-200 resize-none focus:outline-none focus:border-accent-orange/50" rows={3} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Content Type</label>
+                  <select value={editFields.contentType} onChange={e => setEditFields({ ...editFields, contentType: e.target.value })}
+                    className="w-full bg-dark-900 border border-dark-500 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none">
+                    {['Social Post', 'Blog Post', 'Ad Copy', 'Video Script', 'Landing Page', 'Strategy', 'Research', 'Report', 'Design', 'Artist Spotlight', 'General'].map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Priority</label>
+                  <select value={editFields.priority} onChange={e => setEditFields({ ...editFields, priority: e.target.value })}
+                    className="w-full bg-dark-900 border border-dark-500 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none">
+                    {['High', 'Medium', 'Low'].map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                {saveStatus === 'success' && <span className="text-[10px] text-accent-green font-semibold">Saved!</span>}
+                {saveStatus === 'error' && <span className="text-[10px] text-red-400 font-semibold">Failed to save</span>}
+                <button onClick={() => { setIsEditing(false); setEditFields({ name: task.name, description: task.description, contentType: task.contentType, priority: task.priority }) }}
+                  className="text-xs px-3 py-1.5 text-gray-500 hover:text-gray-300 transition-colors">Cancel</button>
+                <button onClick={handleSaveEdit} disabled={saving}
+                  className="text-xs px-4 py-1.5 bg-accent-orange/20 text-accent-orange rounded-md hover:bg-accent-orange/30 transition-colors border border-accent-orange/30 font-semibold disabled:opacity-50">
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
           )}
 

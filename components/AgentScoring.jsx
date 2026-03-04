@@ -42,13 +42,13 @@ export default function AgentScoring({ agents, tasks, activity }) {
       const errors = agentActivity.filter(a => a.action === 'error').length
       const revisions = agentTasks.filter(t => t.output?.includes('PREVIOUS OUTPUT')).length
 
-      // Calculate composite score (0-100)
-      const productivityScore = Math.min(100, done.length * 15)
-      const qualityScore = Math.max(0, 100 - (revisions * 20) - (errors * 25))
-      const outputScore = Math.min(100, Math.round(avgOutput / 50))
-      const reliabilityScore = completionRate
+      // Calculate composite score (0-100) — generous scoring
+      const productivityScore = Math.min(100, done.length > 0 ? 40 + done.length * 20 : 0)
+      const qualityScore = Math.max(20, 100 - (revisions * 10) - (errors * 15))
+      const outputScore = Math.min(100, avgOutput > 0 ? 30 + Math.round(avgOutput / 100) : 0)
+      const reliabilityScore = agentTasks.length > 0 ? Math.max(30, completionRate) : 50
 
-      const overall = Math.round((productivityScore * 0.3 + qualityScore * 0.3 + outputScore * 0.2 + reliabilityScore * 0.2))
+      const overall = Math.round((productivityScore * 0.25 + qualityScore * 0.3 + outputScore * 0.2 + reliabilityScore * 0.25))
 
       return {
         agent,
