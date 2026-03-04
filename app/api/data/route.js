@@ -3,25 +3,27 @@ import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+async function safeFetch(fn, label) {
   try {
-    const [agents, tasks, activity] = await Promise.all([
-      getAgents(),
-      getTasks(),
-      getActivityFeed(),
-    ])
-
-    return NextResponse.json({
-      agents,
-      tasks,
-      activity,
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    console.error('Airtable fetch error:', error)
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    )
+    return await fn()
+  } catch (err) {
+    console.warn(`[data] ${label} failed: ${err.message}`)
+    return []
   }
+}
+
+export async function GET() {
+  const [agents, tasks, activity] = await Promise.all([
+    safeFetch(getAgents, 'agents'),
+    safeFetch(getTasks, 'tasks'),
+    safeFetch(getActivityFeed, 'activity'),
+  ])
+
+  return NextResponse.json({
+    agents,
+    tasks,
+    activity,
+    timestamp: new Date().toISOString(),
+    partial: agents.length === 0 || tasks.length === 0,
+  })
 }
