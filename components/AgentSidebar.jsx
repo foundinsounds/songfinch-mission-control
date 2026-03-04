@@ -25,6 +25,8 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, tas
 
   const getTypeBadge = (type) => {
     switch (type) {
+      case 'EXEC': return { bg: 'bg-yellow-500/20', text: 'text-yellow-300', label: 'EXEC' }
+      case 'OPS': return { bg: 'bg-indigo-500/15', text: 'text-indigo-400', label: 'OPS' }
       case 'LEAD': return { bg: 'bg-orange-500/15', text: 'text-orange-400', label: 'LEAD' }
       case 'SPC': return { bg: 'bg-blue-500/15', text: 'text-blue-400', label: 'SPC' }
       case 'INT': return { bg: 'bg-teal-500/15', text: 'text-teal-400', label: 'INT' }
