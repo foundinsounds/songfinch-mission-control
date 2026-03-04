@@ -1,11 +1,108 @@
 // Agent Runner — Cron endpoint that processes tasks autonomously
 // Called by Vercel Cron or manually via dashboard
-// Flow: Assigned tasks → AI generates content → moves to Review
+// Flow: Inbox → auto-assign → Assigned → AI generates content → Review
 
 import { getTasks, getAgents, updateTask, addActivity, addContent } from '../../../../lib/airtable'
 import { callAI } from '../../../../lib/ai'
 import { buildDesignContext, isFigmaConfigured } from '../../../../lib/figma'
 import { NextResponse } from 'next/server'
+
+// ---- AUTO-ASSIGNMENT ENGINE ----
+// Maps content types and task keywords to the best agent
+
+const AGENT_ROUTING = {
+  // Content type → agent name
+  'ad_copy': 'HOOK',
+  'ad copy': 'HOOK',
+  'Ad Copy': 'HOOK',
+  'social_post': 'PULSE',
+  'social post': 'PULSE',
+  'Social Post': 'PULSE',
+  'video_script': 'LENS',
+  'video script': 'LENS',
+  'Video Script': 'LENS',
+  'blog_post': 'STORY',
+  'blog post': 'STORY',
+  'Blog Post': 'STORY',
+  'seo': 'FLOW',
+  'SEO': 'FLOW',
+  'landing_page': 'FLOW',
+  'landing page': 'FLOW',
+  'Landing Page': 'FLOW',
+  'strategy': 'CMO',
+  'Strategy': 'CMO',
+  'research': 'SCOUT',
+  'Research': 'SCOUT',
+  'report': 'CHIEF',
+  'Report': 'CHIEF',
+  'design': 'PIXEL',
+  'Design': 'PIXEL',
+  'artist_spotlight': 'STORY',
+  'Artist Spotlight': 'STORY',
+  'General': 'MUSE',
+}
+
+// Keyword patterns in task name/description → agent
+const KEYWORD_ROUTING = [
+  { patterns: ['ad', 'copy', 'cta', 'headline', 'retarget', 'facebook ad', 'instagram ad'], agent: 'HOOK' },
+  { patterns: ['social', 'post', 'tiktok', 'instagram', 'twitter', 'thread', 'carousel', 'reel'], agent: 'PULSE' },
+  { patterns: ['video', 'script', 'storyboard', 'reel script', 'commercial'], agent: 'LENS' },
+  { patterns: ['blog', 'article', 'story', 'spotlight', 'long-form', 'content write'], agent: 'STORY' },
+  { patterns: ['seo', 'landing', 'page', 'conversion', 'keyword'], agent: 'FLOW' },
+  { patterns: ['strategy', 'campaign', 'plan', 'quarterly', 'budget', 'audience'], agent: 'CMO' },
+  { patterns: ['research', 'competitor', 'trend', 'monitor', 'intel', 'audit'], agent: 'SCOUT' },
+  { patterns: ['report', 'daily', 'status', 'performance', 'pipeline'], agent: 'CHIEF' },
+  { patterns: ['design', 'wireframe', 'layout', 'figma', 'mockup', 'ui'], agent: 'PIXEL' },
+  { patterns: ['creative', 'brief', 'direction', 'brand'], agent: 'MUSE' },
+]
+
+function findBestAgent(task, agents) {
+  // 1. Direct content type match
+  if (task.contentType && AGENT_ROUTING[task.contentType]) {
+    const name = AGENT_ROUTING[task.contentType]
+    if (agents.find(a => a.name === name)) return name
+  }
+
+  // 2. Keyword matching on task name + description
+  const text = `${task.name} ${task.description}`.toLowerCase()
+  for (const route of KEYWORD_ROUTING) {
+    for (const pattern of route.patterns) {
+      if (text.includes(pattern)) {
+        if (agents.find(a => a.name === route.agent)) return route.agent
+      }
+    }
+  }
+
+  // 3. Fallback: assign to MUSE (Creative Director) to triage
+  return 'MUSE'
+}
+
+async function autoAssignInboxTasks(tasks, agents) {
+  const inboxTasks = tasks.filter(t => t.status === 'Inbox' && !t.agent)
+  const assigned = []
+
+  for (const task of inboxTasks) {
+    const agentName = findBestAgent(task, agents)
+    try {
+      await updateTask(task.id, { 'Status': 'Assigned', 'Agent': agentName })
+      await addActivity({
+        'Agent': 'Council',
+        'Action': 'auto-assigned',
+        'Task': task.name,
+        'Details': `Auto-assigned to ${agentName} based on content type: ${task.contentType || 'keyword match'}`,
+        'Type': 'Task Created',
+      })
+      assigned.push({ task: task.name, agent: agentName })
+      // Update the task object in-memory so the runner can process it
+      task.status = 'Assigned'
+      task.agent = agentName
+    } catch (err) {
+      console.warn(`[RUNNER] Failed to auto-assign "${task.name}":`, err.message)
+    }
+  }
+
+  return assigned
+}
 
 // Memory helpers
 async function getAgentMemories(agentName) {
@@ -76,18 +173,28 @@ export async function GET(request) {
       getAgents({ noCache: true }),
     ])
 
-    // 2. Find tasks ready for processing (limit to 1 per run for Hobby plan 10s limit)
+    // 2. AUTO-ASSIGN: Move Inbox tasks to Assigned with the right agent
+    const autoAssigned = await autoAssignInboxTasks(tasks, agents)
+    if (autoAssigned.length > 0) {
+      console.log(`[RUNNER] Auto-assigned ${autoAssigned.length} tasks:`, autoAssigned.map(a => `${a.task} → ${a.agent}`).join(', '))
+    }
+
+    // 3. Find tasks ready for processing (increased default to 3 for Pro plan)
     const url = new URL(request.url)
-    const limit = parseInt(url.searchParams.get('limit') || '1', 10)
+    const limit = parseInt(url.searchParams.get('limit') || '3', 10)
     const allAssigned = tasks.filter(t => t.status === 'Assigned' && t.agent)
     const assignedTasks = allAssigned.slice(0, limit)
 
     if (assignedTasks.length === 0) {
       return NextResponse.json({
-        message: allAssigned.length > 0 ? `${allAssigned.length} assigned tasks available` : 'No tasks ready for processing',
+        message: autoAssigned.length > 0
+          ? `Auto-assigned ${autoAssigned.length} tasks (will process on next run)`
+          : 'No tasks ready for processing',
+        autoAssigned,
         duration: `${Date.now() - startTime}ms`,
         stats: {
           total: tasks.length,
+          inbox: tasks.filter(t => t.status === 'Inbox').length,
           assigned: allAssigned.length,
           inProgress: tasks.filter(t => t.status === 'In Progress').length,
           review: tasks.filter(t => t.status === 'Review').length,

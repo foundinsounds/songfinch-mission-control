@@ -28,6 +28,7 @@ import BatchOperations from '../components/BatchOperations'
 import SmartInbox from '../components/SmartInbox'
 import ABTestPipeline from '../components/ABTestPipeline'
 import CouncilIntelligence from '../components/CouncilIntelligence'
+import ViewSwitcher from '../components/ViewSwitcher'
 
 export default function Roundtable() {
   const [agents, setAgents] = useState(FALLBACK_AGENTS)
@@ -111,12 +112,12 @@ export default function Roundtable() {
 
   // Read settings from localStorage
   const getSettings = useCallback(() => {
-    if (typeof window === 'undefined') return { autoRunAgents: false, runInterval: 60, pollInterval: 15 }
+    if (typeof window === 'undefined') return { autoRunAgents: true, runInterval: 15, pollInterval: 10 }
     try {
       const saved = localStorage.getItem('roundtable-settings')
-      if (saved) return { autoRunAgents: false, runInterval: 60, pollInterval: 15, ...JSON.parse(saved) }
+      if (saved) return { autoRunAgents: true, runInterval: 15, pollInterval: 10, ...JSON.parse(saved) }
     } catch {}
-    return { autoRunAgents: false, runInterval: 60, pollInterval: 15 }
+    return { autoRunAgents: true, runInterval: 15, pollInterval: 10 }
   }, [])
 
   // Initial fetch + polling (uses configured pollInterval)
@@ -368,40 +369,8 @@ export default function Roundtable() {
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* View Switcher */}
-          <div className="px-4 py-2 border-b border-dark-500 flex items-center gap-1 shrink-0 bg-dark-800/30 overflow-x-auto">
-            {[
-              { key: 'kanban', label: 'Board', icon: '\u25A6' },
-              { key: 'list', label: 'List', icon: '\u2630' },
-              { key: 'inbox', label: 'Inbox', icon: '\u{1F4E5}' },
-              { key: 'agents', label: 'Agents', icon: '\u{1F916}' },
-              { key: 'calendar', label: 'Calendar', icon: '\u{1F4C5}' },
-              { key: 'campaigns', label: 'Campaigns', icon: '\u{1F3AF}' },
-              { key: 'approvals', label: 'Approvals', icon: '\u2705' },
-              { key: 'content', label: 'Content', icon: '\u{1F4C4}' },
-              { key: 'templates', label: 'Templates', icon: '\u{1F4CB}' },
-              { key: 'abtests', label: 'A/B Tests', icon: '\u{1F9EA}' },
-              { key: 'scoring', label: 'Scoring', icon: '\u{1F3C6}' },
-              { key: 'skills', label: 'Skills', icon: '\u26A1' },
-              { key: 'batch', label: 'Batch', icon: '\u{1F4E6}' },
-              { key: 'intelligence', label: 'Intel', icon: '\u{1F9E0}' },
-              { key: 'webhooks', label: 'Webhooks', icon: '\u{1F517}' },
-              { key: 'analytics', label: 'Analytics', icon: '\u{1F4CA}' },
-            ].map((view) => (
-              <button
-                key={view.key}
-                onClick={() => setCurrentView(view.key)}
-                className={`text-[11px] px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
-                  currentView === view.key
-                    ? 'bg-accent-orange/15 text-accent-orange border border-accent-orange/25 font-semibold'
-                    : 'text-gray-500 hover:text-gray-300 hover:bg-dark-600'
-                }`}
-              >
-                <span>{view.icon}</span>
-                {view.label}
-              </button>
-            ))}
-          </div>
+          {/* View Switcher — Primary tabs + More dropdown */}
+          <ViewSwitcher currentView={currentView} onViewChange={setCurrentView} inReview={stats.inReview} inboxCount={tasks.filter(t => t.status !== 'Done' && t.status !== 'Archived').length} />
 
           {/* View Content */}
           <div className="flex-1 overflow-auto">
