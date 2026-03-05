@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { MODEL_OPTIONS, MODEL_LEGACY_MAP } from '../lib/constants'
+import PixelAgents from './PixelAgents'
 
 function resolveModel(m) {
   const resolved = MODEL_LEGACY_MAP[m] || m || 'claude-sonnet-4-6'
@@ -184,6 +185,7 @@ export default function AnalyticsDashboard({ agents, tasks, activity }) {
     { key: 'quality', label: 'Quality & Pipeline', icon: '\u{2B50}' },
     { key: 'visuals', label: 'Visuals & Calendar', icon: '\u{1F3A8}' },
     { key: 'intelligence', label: 'Intelligence', icon: '\u{1F9E0}' },
+    { key: 'office', label: 'Agent Office', icon: '\u{1F3E2}' },
   ]
 
   return (
@@ -1186,6 +1188,11 @@ export default function AnalyticsDashboard({ agents, tasks, activity }) {
             <p className="text-xs text-gray-600 text-center py-20">Failed to load intelligence data</p>
           )}
         </>
+      )}
+
+      {/* ══════════ AGENT OFFICE TAB ══════════ */}
+      {tab === 'office' && (
+        <PixelAgents tasks={tasks} agents={agents} />
       )}
     </div>
   )

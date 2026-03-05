@@ -396,6 +396,22 @@ select option {
   transform: translateX(22px);
 }
 
+/* Pixel Agents animations */
+@keyframes scroll-x {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-scroll-x {
+  animation: scroll-x 30s linear infinite;
+}
+@keyframes bounce-subtle {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-2px); }
+}
+.animate-bounce-subtle {
+  animation: bounce-subtle 1s ease-in-out infinite;
+}
+
 /* Roundtable Logo styling */
 .roundtable-logo {
   color: var(--text-primary);
