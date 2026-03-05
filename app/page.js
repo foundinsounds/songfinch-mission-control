@@ -472,6 +472,7 @@ export default function Roundtable() {
                 agents={agents}
                 tasks={tasks}
                 activity={activity}
+                onConfigAgent={(agent) => setConfigAgent(agent)}
               />
             )}
           </div>

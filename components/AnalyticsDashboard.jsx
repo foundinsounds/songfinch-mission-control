@@ -101,7 +101,7 @@ function TerritoryCard({ territory }) {
 
 // ── MAIN DASHBOARD ────────────────────────────────
 
-export default function AnalyticsDashboard({ agents, tasks, activity }) {
+export default function AnalyticsDashboard({ agents, tasks, activity, onConfigAgent }) {
   const [liveStats, setLiveStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('overview') // overview | agents | territories | quality | intelligence
@@ -1192,7 +1192,7 @@ export default function AnalyticsDashboard({ agents, tasks, activity }) {
 
       {/* ══════════ AGENT OFFICE TAB ══════════ */}
       {tab === 'office' && (
-        <PixelAgents tasks={tasks} agents={agents} />
+        <PixelAgents tasks={tasks} agents={agents} onAgentClick={onConfigAgent} />
       )}
     </div>
   )
