@@ -10,9 +10,11 @@ export default function ProductivityScore({ tasks = [], activity = [] }) {
   const breakdown = useMemo(() => {
     // 1. Task completion rate: done / total * 40
     const totalTasks = tasks.length;
-    const doneTasks = tasks.filter(
-      (t) => t.status === 'done' || t.status === 'completed'
-    ).length;
+    const normalize = (s) => (s || '').toLowerCase().replace(/[_\s]+/g, '_');
+    const doneTasks = tasks.filter((t) => {
+      const s = normalize(t.status);
+      return s === 'done' || s === 'completed';
+    }).length;
     const completionScore =
       totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 40) : 0;
 
@@ -23,32 +25,41 @@ export default function ProductivityScore({ tasks = [], activity = [] }) {
       now.getMonth(),
       now.getDate()
     );
-    const reviewToDoneToday = activity.filter((ev) => {
+    // Count approvals today as turnaround proxy (Airtable uses 'Approved' type, not 'status_change')
+    const approvedToday = activity.filter((ev) => {
       const evDate = new Date(ev.timestamp || ev.created_at || ev.date || 0);
+      const evType = normalize(ev.type || ev.action || '');
       return (
         evDate >= todayStart &&
-        (ev.type === 'status_change' || ev.action === 'status_change') &&
-        (ev.from === 'review' || ev.from === 'in_review') &&
-        (ev.to === 'done' || ev.to === 'completed')
+        (evType === 'approved' || evType === 'status_change' || evType === 'completed')
       );
     }).length;
-    // Cap at 20 points; each review-to-done gives 4 points (5 tasks = max)
-    const turnaroundScore = Math.min(20, reviewToDoneToday * 4);
+    // Also count tasks marked Done today
+    const completedToday = activity.filter((ev) => {
+      const evDate = new Date(ev.timestamp || ev.created_at || ev.date || 0);
+      const evType = normalize(ev.type || ev.action || '');
+      return evDate >= todayStart && (evType === 'content_generated');
+    }).length;
+    const turnaroundEvents = approvedToday + completedToday;
+    // Cap at 20 points; each event gives 4 points (5 events = max)
+    const turnaroundScore = Math.min(20, turnaroundEvents * 4);
 
     // 3. Agent utilization: agents with active tasks / total agents * 20
     const agentMap = new Map();
     tasks.forEach((t) => {
-      const agentId = t.agent_id || t.agentId || t.assignee;
+      const agentId = t.agent || t.agent_id || t.agentId || t.assignee;
       if (agentId) {
         if (!agentMap.has(agentId)) {
           agentMap.set(agentId, { total: 0, active: 0 });
         }
         agentMap.get(agentId).total += 1;
+        const s = normalize(t.status);
         const isActive =
-          t.status === 'in_progress' ||
-          t.status === 'active' ||
-          t.status === 'review' ||
-          t.status === 'in_review';
+          s === 'in_progress' ||
+          s === 'active' ||
+          s === 'assigned' ||
+          s === 'review' ||
+          s === 'in_review';
         if (isActive) {
           agentMap.get(agentId).active += 1;
         }
