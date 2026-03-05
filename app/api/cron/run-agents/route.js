@@ -53,11 +53,14 @@ function getAgentWorkloads(tasks, agents) {
   const workloads = {}
   agents.forEach(a => {
     const agentTasks = tasks.filter(t => t.agent === a.name && t.status !== 'Done')
+    // "active" = only Assigned + In Progress. Review tasks are async and shouldn't
+    // block the agent from picking up new work.
+    const activeTasks = agentTasks.filter(t => t.status === 'Assigned' || t.status === 'In Progress')
     workloads[a.name] = {
       assigned: agentTasks.filter(t => t.status === 'Assigned').length,
       inProgress: agentTasks.filter(t => t.status === 'In Progress').length,
       review: agentTasks.filter(t => t.status === 'Review').length,
-      total: agentTasks.length,
+      total: activeTasks.length, // Only count active work toward WIP limits
     }
   })
   return workloads
@@ -211,7 +214,7 @@ async function triggerAutoReview() {
     const res = await fetch(`${baseUrl}/api/review/auto`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ limit: 5 }),
+      body: JSON.stringify({ limit: 15 }),
     })
     const data = await res.json()
     return data
@@ -228,18 +231,21 @@ async function triggerAggressivePlanning(tasks) {
   const twoWeeksOut = new Date(now)
   twoWeeksOut.setDate(twoWeeksOut.getDate() + 14)
 
-  // Count tasks in the pipeline (not Done)
-  const activeTasks = tasks.filter(t => t.status !== 'Done')
+  // Count tasks in the WORKING pipeline (Inbox + Assigned + In Progress).
+  // Review tasks are async — they shouldn't slow down new content creation.
+  const workingTasks = tasks.filter(t => t.status === 'Inbox' || t.status === 'Assigned' || t.status === 'In Progress')
   const inboxOrAssigned = tasks.filter(t => t.status === 'Inbox' || t.status === 'Assigned')
+  const reviewCount = tasks.filter(t => t.status === 'Review').length
 
-  // AGGRESSIVE: Plan if we have fewer than 15 active tasks or fewer than 8 in queue
-  if (activeTasks.length >= 15 && inboxOrAssigned.length >= 8) {
-    console.log(`[RUNNER] Pipeline healthy: ${activeTasks.length} active, ${inboxOrAssigned.length} queued. Skipping plan.`)
+  // AGGRESSIVE: Plan if working pipeline has fewer than 15 tasks or fewer than 8 queued
+  // Review tasks are excluded — agents should keep creating while CHIEF reviews
+  if (workingTasks.length >= 15 && inboxOrAssigned.length >= 8) {
+    console.log(`[RUNNER] Pipeline healthy: ${workingTasks.length} working, ${inboxOrAssigned.length} queued, ${reviewCount} in review. Skipping plan.`)
     return null
   }
 
   try {
-    console.log(`[RUNNER] Pipeline needs fuel: ${activeTasks.length} active, ${inboxOrAssigned.length} queued. Triggering CMO planner...`)
+    console.log(`[RUNNER] Pipeline needs fuel: ${workingTasks.length} working, ${inboxOrAssigned.length} queued, ${reviewCount} in review. Triggering CMO planner...`)
     const baseUrl = process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : 'http://localhost:3000'
@@ -293,7 +299,23 @@ export async function GET(request) {
       getAgents({ noCache: true }),
     ])
 
-    // 2. AGGRESSIVE AUTO-PLAN: Keep the pipeline full
+    // 2. AUTO-REVIEW FIRST: Clear the Review queue before doing anything else.
+    // This lets agents pick up revised tasks and keeps content flowing to Done.
+    const reviewData = await triggerAutoReview()
+    results.reviewResults = reviewData
+    if (reviewData?.results) {
+      const approved = reviewData.results.approved?.length || 0
+      const revised = reviewData.results.revised?.length || 0
+      if (approved + revised > 0) {
+        console.log(`[RUNNER] Pre-review: ${approved} approved, ${revised} revised`)
+        // Re-fetch tasks after review to get updated statuses
+        const freshPostReview = await getTasks({ noCache: true })
+        tasks.length = 0
+        tasks.push(...freshPostReview)
+      }
+    }
+
+    // 3. AGGRESSIVE AUTO-PLAN: Keep the pipeline full
     const planData = await triggerAggressivePlanning(tasks)
     results.planResults = planData
     if (planData?.tasksCreated > 0) {
@@ -353,12 +375,9 @@ export async function GET(request) {
     const assignedTasks = allAssigned.slice(0, limit)
 
     if (assignedTasks.length === 0 && autoAssigned.length === 0) {
-      // Still run auto-review even if nothing to process
-      const reviewData = await triggerAutoReview()
-      results.reviewResults = reviewData
-
+      // Auto-review already ran at top of cycle
       return NextResponse.json({
-        message: 'No tasks to process. Ran auto-review.',
+        message: 'No tasks to process. Auto-review ran at start of cycle.',
         results,
         duration: `${Date.now() - startTime}ms`,
         stats: buildStats(tasks),
@@ -455,10 +474,22 @@ export async function GET(request) {
       }
     }
 
-    // 8. AUTO-REVIEW: After processing, review anything in Review status
-    const reviewData = await triggerAutoReview()
-    results.reviewResults = reviewData
+    // 8. POST-PROCESS REVIEW: Run auto-review again to catch newly completed tasks
+    const postReviewData = await triggerAutoReview()
+    if (postReviewData?.results) {
+      // Merge post-review results into the pre-review results
+      const pre = results.reviewResults?.results || {}
+      results.reviewResults = {
+        ...results.reviewResults,
+        results: {
+          approved: [...(pre.approved || []), ...(postReviewData.results.approved || [])],
+          revised: [...(pre.revised || []), ...(postReviewData.results.revised || [])],
+          errors: [...(pre.errors || []), ...(postReviewData.results.errors || [])],
+        },
+      }
+    }
 
+    const reviewData = results.reviewResults
     const duration = Date.now() - startTime
 
     // Log run summary

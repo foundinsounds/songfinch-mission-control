@@ -9,10 +9,14 @@ const STATUS_CONFIG = {
 }
 
 const SERVICE_STATUS_DOT = {
-  connected:    'bg-accent-green',
-  disconnected: 'bg-gray-500',
-  error:        'bg-accent-red',
+  connected:      'bg-accent-green',
+  disconnected:   'bg-accent-red',
+  error:          'bg-accent-red',
+  not_configured: 'bg-dark-400',
+  unknown:        'bg-gray-600',
 }
+
+const CORE_SERVICES = new Set(['airtable', 'ai', 'dalle', 'cron'])
 
 export default function PipelineStatusBadge({ pollInterval = 30000 }) {
   const [data, setData] = useState(null)
@@ -53,8 +57,8 @@ export default function PipelineStatusBadge({ pollInterval = 30000 }) {
   // Derive display values
   const status = data?.status
   const config = STATUS_CONFIG[status]
-  const connected = data?.connectedCount ?? 0
-  const total = data?.totalCount ?? 0
+  const coreConnected = data?.coreConnected ?? 0
+  const coreTotal = data?.coreTotal ?? 0
   const services = data?.services ?? {}
 
   let dotClass = 'bg-gray-500'
@@ -63,9 +67,17 @@ export default function PipelineStatusBadge({ pollInterval = 30000 }) {
 
   if (!loading && config) {
     dotClass = config.dot
-    labelText = status === 'degraded' ? `Degraded (${connected}/${total})` : config.label.replace('Pipeline ', '')
+    labelText = status === 'healthy'
+      ? `${coreConnected}/${coreTotal} Core`
+      : status === 'degraded'
+        ? `Degraded (${coreConnected}/${coreTotal})`
+        : config.label.replace('Pipeline ', '')
     labelClass = config.textClass
   }
+
+  // Split services into core and optional for grouped display
+  const coreEntries = Object.entries(services).filter(([k]) => CORE_SERVICES.has(k))
+  const optionalEntries = Object.entries(services).filter(([k]) => !CORE_SERVICES.has(k))
 
   return (
     <div className="relative" ref={ref}>
@@ -86,34 +98,62 @@ export default function PipelineStatusBadge({ pollInterval = 30000 }) {
         <div className="absolute right-0 top-full mt-1.5 z-50 w-64 rounded-lg bg-dark-700 border border-dark-500 shadow-xl shadow-black/40 overflow-hidden">
           {/* Header */}
           <div className="px-3 py-2 border-b border-dark-500 flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Pipeline Services</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Core Services</span>
             <span className={`text-[9px] font-semibold ${labelClass}`}>
-              {connected}/{total} connected
+              {coreConnected}/{coreTotal} connected
             </span>
           </div>
 
-          {/* Service list */}
+          {/* Core service list */}
           <div className="max-h-52 overflow-y-auto">
-            {Object.keys(services).length === 0 && (
+            {coreEntries.length === 0 && (
               <div className="px-3 py-4 text-center text-[10px] text-gray-600">
                 {loading ? 'Loading services...' : 'No service data available'}
               </div>
             )}
-            {Object.entries(services).map(([name, svc]) => {
+            {coreEntries.map(([name, svc]) => {
               const svcStatus = typeof svc === 'string' ? svc : svc?.status ?? 'unknown'
               const svcDot = SERVICE_STATUS_DOT[svcStatus] || 'bg-gray-600'
+              const svcName = typeof svc === 'object' ? svc?.name || name : name
               return (
                 <div key={name} className="flex items-center justify-between px-3 py-1.5 hover:bg-dark-600/50 transition-colors">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${svcDot}`} />
-                    <span className="text-[10px] text-gray-300 truncate">{name}</span>
+                    <span className="text-[10px] text-gray-300 truncate">{svcName}</span>
                   </div>
                   <span className={`text-[9px] font-mono capitalize ${
                     svcStatus === 'connected' ? 'text-accent-green' :
-                    svcStatus === 'error' ? 'text-accent-red' :
+                    svcStatus === 'error' || svcStatus === 'disconnected' ? 'text-accent-red' :
                     'text-gray-500'
                   }`}>
-                    {svcStatus}
+                    {svcStatus === 'not_configured' ? 'n/a' : svcStatus}
+                  </span>
+                </div>
+              )
+            })}
+
+            {/* Optional integrations header */}
+            {optionalEntries.length > 0 && (
+              <div className="px-3 pt-2 pb-1 border-t border-dark-500/50">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-gray-600">Optional Integrations</span>
+              </div>
+            )}
+            {optionalEntries.map(([name, svc]) => {
+              const svcStatus = typeof svc === 'string' ? svc : svc?.status ?? 'unknown'
+              const svcDot = SERVICE_STATUS_DOT[svcStatus] || 'bg-gray-600'
+              const svcName = typeof svc === 'object' ? svc?.name || name : name
+              return (
+                <div key={name} className="flex items-center justify-between px-3 py-1.5 hover:bg-dark-600/50 transition-colors opacity-70">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${svcDot}`} />
+                    <span className="text-[10px] text-gray-400 truncate">{svcName}</span>
+                  </div>
+                  <span className={`text-[9px] font-mono capitalize ${
+                    svcStatus === 'connected' ? 'text-accent-green' :
+                    svcStatus === 'error' || svcStatus === 'disconnected' ? 'text-accent-red' :
+                    'text-gray-600'
+                  }`}>
+                    {svcStatus === 'not_configured' ? 'not set up' : svcStatus}
                   </span>
                 </div>
               )

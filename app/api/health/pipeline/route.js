@@ -124,21 +124,37 @@ export async function GET() {
       folderId: process.env.GOOGLE_DRIVE_FOLDER_ID || null,
     }
 
-    const services = { airtable, ai, dalle, ltx, cron, figma, slack, drive }
+    // Separate CORE services (needed for content generation) from OPTIONAL integrations
+    const coreServices = { airtable, ai, dalle, cron }
+    const optionalServices = { ltx, figma, slack, drive }
 
-    // Overall health
-    const connectedCount = Object.values(services).filter(s => s.status === 'connected').length
-    const totalCount = Object.keys(services).length
-    const overallStatus = connectedCount === totalCount
+    // Mark unconfigured optional services as "not_configured" (not "disconnected")
+    for (const svc of Object.values(optionalServices)) {
+      if (!svc.configured) svc.status = 'not_configured'
+    }
+
+    const services = { ...coreServices, ...optionalServices }
+
+    // Health is determined ONLY by core services
+    const coreConnected = Object.values(coreServices).filter(s => s.status === 'connected').length
+    const coreTotal = Object.keys(coreServices).length
+    const optConnected = Object.values(optionalServices).filter(s => s.status === 'connected').length
+    const optTotal = Object.keys(optionalServices).length
+
+    const overallStatus = coreConnected === coreTotal
       ? 'healthy'
-      : connectedCount >= 3
+      : coreConnected >= 2
         ? 'degraded'
         : 'down'
 
     return NextResponse.json({
       status: overallStatus,
-      connectedCount,
-      totalCount,
+      connectedCount: coreConnected + optConnected,
+      totalCount: coreTotal + optTotal,
+      coreConnected,
+      coreTotal,
+      optionalConnected: optConnected,
+      optionalTotal: optTotal,
       services,
       timestamp: new Date().toISOString(),
       checkDurationMs: Date.now() - startTime,

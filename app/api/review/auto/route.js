@@ -22,7 +22,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json().catch(() => ({}))
-    const limit = body.limit || 10 // Increased from 5 → 10 for higher throughput
+    const limit = body.limit || 15 // Aggressive: clear Review queue fast so agents keep creating
 
     // Fetch tasks in Review status
     const [tasks, agents] = await Promise.all([
