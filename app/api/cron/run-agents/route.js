@@ -8,6 +8,7 @@ import { callAI } from '../../../../lib/ai'
 import { generateImage, autoPreset, extractVisualPrompt } from '../../../../lib/dalle'
 import { FRAMEWORK_BRIEF } from '../../../../lib/framework'
 import { buildDesignContext, isFigmaConfigured } from '../../../../lib/figma'
+import { notifyCronCycle, notifyPipelineAlert } from '../../../../lib/slack'
 import { NextResponse } from 'next/server'
 
 // ---- AUTO-ASSIGNMENT ENGINE ----
@@ -508,6 +509,26 @@ export async function GET(request) {
       'Details': `Processed ${results.processed.length}/${assignedTasks.length} tasks in ${duration}ms. Reviewed: ${reviewData?.results?.approved?.length || 0} approved, ${reviewData?.results?.revised?.length || 0} revised. ${results.errors.length} errors.`,
       'Type': 'Comment',
     }).catch(() => {})
+
+    // Slack notification for cron cycle
+    notifyCronCycle({
+      processed: results.processed.length,
+      assigned: results.autoAssigned.length,
+      planned: results.planResults?.tasksCreated || 0,
+      reviewed: (reviewData?.results?.approved?.length || 0) + (reviewData?.results?.revised?.length || 0),
+      errors: results.errors.length,
+      duration: `${duration}ms`,
+    }).catch(() => {})
+
+    // Pipeline health alerts
+    const inboxCount = tasks.filter(t => t.status === 'Inbox').length
+    if (inboxCount > 15) {
+      notifyPipelineAlert({
+        type: 'low_queue',
+        message: `${inboxCount} unassigned tasks piling up in Inbox`,
+        details: 'Consider running campaign planner or manually assigning tasks.',
+      }).catch(() => {})
+    }
 
     return NextResponse.json({
       message: `Processed ${results.processed.length} tasks, reviewed ${(reviewData?.results?.approved?.length || 0) + (reviewData?.results?.revised?.length || 0)}`,

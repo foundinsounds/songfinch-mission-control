@@ -5,6 +5,7 @@
 import { getTasks, getAgents, addActivity, createTask } from '../../../../lib/airtable'
 import { callAI } from '../../../../lib/ai'
 import { EMOTIONAL_TERRITORIES, FRAMEWORK_BRIEF } from '../../../../lib/framework'
+import { notifyCampaignPlanned } from '../../../../lib/slack'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -158,6 +159,20 @@ export async function POST(request) {
       'Task': campaignName,
       'Details': `Auto-generated ${created.length} content tasks for ${weeksAhead} week(s). Campaign: ${campaignName}. Pipeline: ${activeTasks.length} active → ${activeTasks.length + created.length} active.`,
       'Type': 'Content Generated',
+    }).catch(() => {})
+
+    // Slack notification for campaign planning
+    const contentTypesCreated = [...new Set(created.map(t => t.contentType).filter(Boolean))]
+    const territoriesCreated = [...new Set(created.map(t => {
+      const m = t.description?.match(/Territory:\s*(Celebration|Gratitude|Memory|Identity|Tribute)/i)
+      return m ? m[1] : null
+    }).filter(Boolean))]
+
+    notifyCampaignPlanned({
+      campaign: campaignName,
+      tasksCreated: created.length,
+      contentTypes: contentTypesCreated,
+      territories: territoriesCreated,
     }).catch(() => {})
 
     return NextResponse.json({

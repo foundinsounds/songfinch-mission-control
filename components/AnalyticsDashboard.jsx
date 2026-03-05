@@ -103,7 +103,9 @@ function TerritoryCard({ territory }) {
 export default function AnalyticsDashboard({ agents, tasks, activity }) {
   const [liveStats, setLiveStats] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('overview') // overview | agents | territories | quality
+  const [tab, setTab] = useState('overview') // overview | agents | territories | quality | intelligence
+  const [intel, setIntel] = useState(null)
+  const [intelLoading, setIntelLoading] = useState(false)
 
   // Fetch enhanced stats from API
   useEffect(() => {
@@ -126,6 +128,28 @@ export default function AnalyticsDashboard({ agents, tasks, activity }) {
     const poller = setInterval(fetchStats, 30000) // refresh every 30s
     return () => { cancelled = true; clearInterval(poller) }
   }, [])
+
+  // Fetch intelligence data (lazy — only when tab is active)
+  useEffect(() => {
+    if (tab !== 'intelligence') return
+    let cancelled = false
+    async function fetchIntel() {
+      setIntelLoading(true)
+      try {
+        const res = await fetch('/api/intelligence')
+        if (!res.ok) throw new Error('Intelligence API error')
+        const data = await res.json()
+        if (!cancelled) setIntel(data)
+      } catch (err) {
+        console.warn('[Analytics] Intelligence fetch failed:', err.message)
+      } finally {
+        if (!cancelled) setIntelLoading(false)
+      }
+    }
+    fetchIntel()
+    const poller = setInterval(fetchIntel, 60000) // refresh every 60s (heavier endpoint)
+    return () => { cancelled = true; clearInterval(poller) }
+  }, [tab])
 
   // Fallback local stats when API hasn't loaded
   const localStats = useMemo(() => {
@@ -159,6 +183,7 @@ export default function AnalyticsDashboard({ agents, tasks, activity }) {
     { key: 'territories', label: 'Emotional Territories', icon: '\u{1F3AF}' },
     { key: 'quality', label: 'Quality & Pipeline', icon: '\u{2B50}' },
     { key: 'visuals', label: 'Visuals & Calendar', icon: '\u{1F3A8}' },
+    { key: 'intelligence', label: 'Intelligence', icon: '\u{1F9E0}' },
   ]
 
   return (
@@ -777,6 +802,388 @@ export default function AnalyticsDashboard({ agents, tasks, activity }) {
                 ))}
               </div>
             </div>
+          )}
+        </>
+      )}
+
+      {/* ═══ INTELLIGENCE TAB ═══ */}
+      {tab === 'intelligence' && (
+        <>
+          {intelLoading && !intel ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center">
+                <div className="text-3xl mb-3 animate-pulse">🧠</div>
+                <p className="text-xs text-gray-500">Computing intelligence...</p>
+              </div>
+            </div>
+          ) : intel ? (
+            <>
+              {/* ── Pipeline Health ────────────────────── */}
+              <div className="grid grid-cols-4 gap-3 mb-6">
+                <MetricCard
+                  label="Flow Rate"
+                  value={intel.pipelineHealth?.flowRate || 0}
+                  sub="completions in 24h"
+                  icon="🚀"
+                  color="text-cyan-400"
+                />
+                <MetricCard
+                  label="Queue Health"
+                  value={intel.pipelineHealth?.queueHealth || '—'}
+                  sub={`${intel.pipelineHealth?.totalActive || 0} active tasks`}
+                  icon="📊"
+                  color={intel.pipelineHealth?.queueHealth === 'healthy' ? 'text-green-400' :
+                         intel.pipelineHealth?.queueHealth === 'busy' ? 'text-yellow-400' :
+                         intel.pipelineHealth?.queueHealth === 'overloaded' ? 'text-red-400' : 'text-gray-400'}
+                />
+                <MetricCard
+                  label="Stalls"
+                  value={intel.pipelineHealth?.stallCount || 0}
+                  sub="tasks stuck too long"
+                  icon="🚨"
+                  color={intel.pipelineHealth?.stallCount > 0 ? 'text-red-400' : 'text-green-400'}
+                />
+                <MetricCard
+                  label="Memory Bank"
+                  value={intel.memoryStats?.total || 0}
+                  sub={`${Object.keys(intel.memoryStats?.byAgent || {}).length} agents learning`}
+                  icon="💾"
+                  color="text-violet-400"
+                />
+              </div>
+
+              {/* Bottleneck Alert */}
+              {intel.pipelineHealth?.bottleneck && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm">⚠️</span>
+                    <span className="text-xs font-semibold text-red-400">Pipeline Bottleneck Detected</span>
+                  </div>
+                  <p className="text-xs text-red-300/80">
+                    {intel.pipelineHealth.bottleneck.message} — {intel.pipelineHealth.bottleneck.count} tasks in {intel.pipelineHealth.bottleneck.stage}
+                  </p>
+                </div>
+              )}
+
+              {/* Pipeline Stage Flow */}
+              {intel.pipelineHealth?.stages && (
+                <div className="bg-dark-700 rounded-lg border border-dark-500 p-4 mb-6">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Pipeline Flow</h3>
+                  <div className="flex items-center justify-between gap-1">
+                    {[
+                      { key: 'inbox', label: 'Inbox', emoji: '📥', color: 'bg-gray-500' },
+                      { key: 'assigned', label: 'Assigned', emoji: '📋', color: 'bg-yellow-500' },
+                      { key: 'inProgress', label: 'In Progress', emoji: '🔨', color: 'bg-blue-500' },
+                      { key: 'review', label: 'Review', emoji: '🔍', color: 'bg-orange-500' },
+                      { key: 'done', label: 'Done', emoji: '✅', color: 'bg-green-500' },
+                    ].map((stage, i) => (
+                      <div key={stage.key} className="flex items-center gap-1 flex-1">
+                        <div className="bg-dark-600 rounded-lg p-3 text-center flex-1">
+                          <div className="text-lg mb-1">{stage.emoji}</div>
+                          <div className="text-lg font-bold text-white">{intel.pipelineHealth.stages[stage.key] || 0}</div>
+                          <div className="text-[9px] text-gray-500 uppercase">{stage.label}</div>
+                        </div>
+                        {i < 4 && <span className="text-gray-600 text-xs shrink-0">→</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── A/B Test Results ──────────────────── */}
+              <div className="bg-dark-700 rounded-lg border border-dark-500 p-4 mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">🧪 A/B Test Results</h3>
+                  <span className="text-[10px] text-gray-600">
+                    {intel.abTests?.completedPairs || 0}/{intel.abTests?.totalPairs || 0} pairs reviewed
+                  </span>
+                </div>
+
+                {(!intel.abTests?.pairs || intel.abTests.pairs.length === 0) ? (
+                  <p className="text-xs text-gray-600 text-center py-6">No A/B test pairs found — CMO will create variant pairs in next planning cycle</p>
+                ) : (
+                  <div className="space-y-3">
+                    {intel.abTests.pairs.map((pair, i) => (
+                      <div key={i} className="bg-dark-600 rounded-lg p-3">
+                        <div className="text-xs font-medium text-gray-300 mb-2">{pair.name}</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* Variant A */}
+                          <div className={`rounded-lg p-2 border ${
+                            pair.winner === 'A' ? 'border-green-500/40 bg-green-500/10' :
+                            pair.winner === 'tie' ? 'border-yellow-500/30 bg-yellow-500/5' :
+                            'border-dark-400 bg-dark-700'
+                          }`}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-bold text-gray-400">[A]</span>
+                              {pair.winner === 'A' && <span className="text-[9px] text-green-400 font-bold">🏆 WINNER</span>}
+                              {pair.winner === 'tie' && <span className="text-[9px] text-yellow-400">TIE</span>}
+                            </div>
+                            <div className="text-xs text-gray-500 truncate">{pair.variantA.agent}</div>
+                            <div className="text-sm font-bold mt-1">
+                              {pair.variantA.score !== null ? (
+                                <span className={pair.winner === 'A' ? 'text-green-400' : 'text-gray-300'}>{pair.variantA.score}/5</span>
+                              ) : (
+                                <span className="text-gray-600">pending</span>
+                              )}
+                            </div>
+                          </div>
+                          {/* Variant B */}
+                          <div className={`rounded-lg p-2 border ${
+                            pair.winner === 'B' ? 'border-green-500/40 bg-green-500/10' :
+                            pair.winner === 'tie' ? 'border-yellow-500/30 bg-yellow-500/5' :
+                            'border-dark-400 bg-dark-700'
+                          }`}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-bold text-gray-400">[B]</span>
+                              {pair.winner === 'B' && <span className="text-[9px] text-green-400 font-bold">🏆 WINNER</span>}
+                            </div>
+                            <div className="text-xs text-gray-500 truncate">{pair.variantB.agent}</div>
+                            <div className="text-sm font-bold mt-1">
+                              {pair.variantB.score !== null ? (
+                                <span className={pair.winner === 'B' ? 'text-green-400' : 'text-gray-300'}>{pair.variantB.score}/5</span>
+                              ) : (
+                                <span className="text-gray-600">pending</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        {pair.scoreDelta !== null && (
+                          <div className="text-[9px] text-gray-600 mt-1 text-center">Δ {pair.scoreDelta.toFixed(1)} pts</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Agent Leaderboard ────────────────── */}
+              <div className="bg-dark-700 rounded-lg border border-dark-500 p-4 mb-6">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">🏆 Agent Leaderboard</h3>
+
+                {(!intel.agentRankings || intel.agentRankings.length === 0) ? (
+                  <p className="text-xs text-gray-600 text-center py-4">No agent performance data yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {intel.agentRankings.map((agent, i) => {
+                      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`
+                      return (
+                        <div key={agent.name} className={`flex items-center gap-3 p-3 rounded-lg ${
+                          i === 0 ? 'bg-yellow-500/10 border border-yellow-500/20' :
+                          i < 3 ? 'bg-dark-600' : 'bg-dark-600/50'
+                        }`}>
+                          <span className="text-lg w-8 text-center shrink-0">{medal}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">{agent.emoji || '🤖'}</span>
+                              <span className="text-xs font-semibold text-gray-200">{agent.name}</span>
+                              {agent.recentTrend === 'improving' && <span className="text-[9px] text-green-400">📈 improving</span>}
+                              {agent.recentTrend === 'declining' && <span className="text-[9px] text-red-400">📉 declining</span>}
+                            </div>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="text-[10px] text-gray-500">{agent.completed}/{agent.totalTasks} done</span>
+                              {agent.avgQuality !== null && (
+                                <span className={`text-[10px] ${agent.avgQuality >= 4 ? 'text-green-400' : agent.avgQuality >= 3 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                  ⭐ {agent.avgQuality}/5
+                                </span>
+                              )}
+                              {agent.revisionRate > 0 && (
+                                <span className="text-[10px] text-orange-400">🔄 {agent.revisionRate}% revision rate</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-lg font-bold text-white">{agent.compositeScore}</div>
+                            <div className="text-[9px] text-gray-500">score</div>
+                          </div>
+                          <div className="w-16 shrink-0">
+                            <MiniBar
+                              value={agent.compositeScore}
+                              max={100}
+                              color={i === 0 ? 'bg-yellow-500' : i < 3 ? 'bg-accent-orange' : 'bg-gray-500'}
+                              height="h-1.5"
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Two-Column: Territory Performance + Content Type Performance ── */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                {/* Territory Performance */}
+                <div className="bg-dark-700 rounded-lg border border-dark-500 p-4">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">🎯 Territory Quality</h3>
+                  {(!intel.territoryPerformance || intel.territoryPerformance.length === 0) ? (
+                    <p className="text-xs text-gray-600 text-center py-4">No territory data yet</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {intel.territoryPerformance.map(terr => {
+                        const colors = TERRITORY_COLORS[terr.name] || TERRITORY_COLORS.Celebration
+                        return (
+                          <div key={terr.name} className={`rounded-lg border ${colors.border} ${colors.bg} p-3`}>
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <span>{colors.emoji}</span>
+                                <span className={`text-xs font-semibold ${colors.text}`}>{terr.name}</span>
+                              </div>
+                              {terr.avgScore !== null && (
+                                <span className={`text-sm font-bold ${
+                                  terr.avgScore >= 4 ? 'text-green-400' : terr.avgScore >= 3 ? 'text-yellow-400' : 'text-red-400'
+                                }`}>{terr.avgScore}/5</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 text-[10px] text-gray-400">
+                              <span>{terr.total} tasks</span>
+                              <span>{terr.completionRate}% done</span>
+                              {terr.reviewCount > 0 && <span>{terr.reviewCount} reviewed</span>}
+                            </div>
+                            {terr.topAgent && (
+                              <div className="text-[9px] text-gray-500 mt-1">Top agent: {terr.topAgent}</div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Content Type Performance */}
+                <div className="bg-dark-700 rounded-lg border border-dark-500 p-4">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">📝 Content Type Quality</h3>
+                  {(!intel.contentTypePerformance || intel.contentTypePerformance.length === 0) ? (
+                    <p className="text-xs text-gray-600 text-center py-4">No content data yet</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {intel.contentTypePerformance.map(ct => (
+                        <div key={ct.type} className="bg-dark-600 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-gray-300">{ct.type}</span>
+                            {ct.avgScore !== null && (
+                              <span className={`text-sm font-bold ${
+                                ct.avgScore >= 4 ? 'text-green-400' : ct.avgScore >= 3 ? 'text-yellow-400' : 'text-red-400'
+                              }`}>{ct.avgScore}/5</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-[10px] text-gray-500">
+                            <span>{ct.done}/{ct.total} done</span>
+                            {ct.reviewCount > 0 && <span>{ct.reviewCount} reviewed</span>}
+                          </div>
+                          <MiniBar
+                            value={ct.done}
+                            max={ct.total}
+                            color={ct.avgScore >= 4 ? 'bg-green-500' : ct.avgScore >= 3 ? 'bg-yellow-500' : 'bg-gray-500'}
+                            height="h-1"
+                          />
+                          {ct.agents.length > 0 && (
+                            <div className="text-[9px] text-gray-600 mt-1">Agents: {ct.agents.join(', ')}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Memory Utilization ──────────────── */}
+              {intel.memoryStats && intel.memoryStats.total > 0 && (
+                <div className="bg-dark-700 rounded-lg border border-dark-500 p-4 mb-6">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">💾 Agent Memory Bank</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* By Agent */}
+                    <div>
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Memories by Agent</div>
+                      <div className="space-y-1">
+                        {Object.entries(intel.memoryStats.byAgent)
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([agent, count]) => (
+                            <div key={agent} className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400 w-16 shrink-0">{agent}</span>
+                              <MiniBar value={count} max={intel.memoryStats.total} color="bg-violet-500" height="h-1.5" />
+                              <span className="text-[10px] text-gray-500 w-8 text-right">{count}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                    {/* By Type */}
+                    <div>
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Memories by Type</div>
+                      <div className="space-y-1">
+                        {Object.entries(intel.memoryStats.byType)
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([type, count]) => (
+                            <div key={type} className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400 w-24 shrink-0 truncate">{type}</span>
+                              <MiniBar value={count} max={intel.memoryStats.total} color="bg-cyan-500" height="h-1.5" />
+                              <span className="text-[10px] text-gray-500 w-8 text-right">{count}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recent Memories */}
+                  {intel.memoryStats.recentMemories?.length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-dark-500">
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Recent Learnings</div>
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {intel.memoryStats.recentMemories.map((mem, i) => (
+                          <div key={i} className="text-[10px] text-gray-400 flex gap-2">
+                            <span className={`shrink-0 px-1 py-0.5 rounded ${
+                              mem.importance === 'High' ? 'bg-red-500/20 text-red-400' :
+                              'bg-dark-600 text-gray-500'
+                            }`}>{mem.agent}</span>
+                            <span className="truncate">{mem.content}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Stalled Tasks ─────────────────────── */}
+              {intel.pipelineHealth?.stalls?.length > 0 && (
+                <div className="bg-dark-700 rounded-lg border border-red-500/30 p-4 mb-6">
+                  <h3 className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-3">🚨 Stalled Tasks</h3>
+                  <div className="space-y-1">
+                    {intel.pipelineHealth.stalls.map((stall, i) => (
+                      <div key={i} className="flex items-center gap-3 text-xs bg-red-500/5 rounded p-2">
+                        <span className="text-gray-500 w-16 shrink-0">{stall.agent || '—'}</span>
+                        <span className="text-gray-300 flex-1 truncate">{stall.task}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          stall.status === 'Assigned' ? 'bg-yellow-500/20 text-yellow-400' :
+                          stall.status === 'In Progress' ? 'bg-blue-500/20 text-blue-400' :
+                          'bg-orange-500/20 text-orange-400'
+                        }`}>{stall.status}</span>
+                        <span className="text-red-400 text-[10px] w-20 text-right">{stall.ageHours}h (exp: {stall.expectedHours}h)</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Recent CHIEF Learnings ────────────── */}
+              {intel.recentLearnings?.length > 0 && (
+                <div className="bg-dark-700 rounded-lg border border-dark-500 p-4">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">🎖️ Recent CHIEF Reviews</h3>
+                  <div className="space-y-1 max-h-60 overflow-y-auto">
+                    {intel.recentLearnings.map((learning, i) => (
+                      <div key={i} className="flex items-center gap-3 text-xs px-2 py-1.5 rounded hover:bg-dark-600">
+                        <span className={`shrink-0 w-5 text-center ${
+                          learning.action === 'approved' ? 'text-green-400' : 'text-orange-400'
+                        }`}>{learning.action === 'approved' ? '✅' : '🔄'}</span>
+                        <span className="text-gray-300 flex-1 truncate">{learning.task}</span>
+                        <span className="text-[10px] text-gray-600 shrink-0">{learning.summary?.substring(0, 60)}...</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-gray-600 text-center py-20">Failed to load intelligence data</p>
           )}
         </>
       )}

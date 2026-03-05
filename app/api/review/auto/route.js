@@ -6,6 +6,7 @@ import { getTasks, getAgents, updateTask, addActivity } from '../../../../lib/ai
 import { callAI } from '../../../../lib/ai'
 import { QUALITY_RUBRIC } from '../../../../lib/framework'
 import { generateImage, autoPreset, extractVisualPrompt } from '../../../../lib/dalle'
+import { notifyApproved, notifyRevised, notifyReviewCycle } from '../../../../lib/slack'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -97,6 +98,14 @@ export async function POST(request) {
             summary: verdict.summary,
           })
 
+          // Slack notification for approval
+          notifyApproved({
+            task: task.name,
+            agent: task.agent,
+            score: verdict.score,
+            summary: verdict.summary,
+          }).catch(() => {})
+
           // AUTO-IMAGE: Generate visual companion for approved content
           const visualTypes = new Set(['Social Post', 'Ad Copy', 'Blog Post', 'Video Script', 'Landing Page'])
           if (visualTypes.has(task.contentType) && process.env.OPENAI_API_KEY) {
@@ -173,6 +182,14 @@ export async function POST(request) {
             feedback: verdict.feedback,
           })
 
+          // Slack notification for revision
+          notifyRevised({
+            task: task.name,
+            agent: task.agent,
+            score: verdict.score,
+            feedback: verdict.feedback,
+          }).catch(() => {})
+
           console.log(`[REVIEWER] 🔄 Revision requested: "${task.name}" (${verdict.score}/5)`)
         }
 
@@ -189,6 +206,14 @@ export async function POST(request) {
       'Task': 'Auto-Review',
       'Details': `Reviewed ${toReview.length} tasks: ${results.approved.length} approved, ${results.revised.length} sent back. ${results.errors.length} errors.`,
       'Type': 'Comment',
+    }).catch(() => {})
+
+    // Slack summary for review cycle
+    notifyReviewCycle({
+      reviewed: toReview.length,
+      approved: results.approved.length,
+      revised: results.revised.length,
+      errors: results.errors.length,
     }).catch(() => {})
 
     return NextResponse.json({
