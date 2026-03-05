@@ -1133,14 +1133,13 @@ function buildRevisionPrompt(task, feedback, previousOutput) {
   return sections.join('\n')
 }
 
+// Only values that actually exist in Airtable's Content Type Single Select dropdown
 const VALID_CONTENT_TYPES = new Set([
-  'Ad Copy', 'Social Post', 'Video Script', 'Blog Post',
-  'Landing Page', 'Artist Spotlight', 'Strategy', 'Image', 'Video',
-  'SEO Content', 'General',
+  'Ad Copy', 'Social Post', 'Video Script', 'Blog Post', 'Landing Page',
 ])
 
 function sanitizeContentType(type) {
-  if (!type) return 'General'
+  if (!type) return 'Social Post'
   if (VALID_CONTENT_TYPES.has(type)) return type
   const lower = type.toLowerCase()
   if (lower.includes('ad') || lower.includes('copy')) return 'Ad Copy'
@@ -1148,7 +1147,7 @@ function sanitizeContentType(type) {
   if (lower.includes('video') || lower.includes('script')) return 'Video Script'
   if (lower.includes('blog') || lower.includes('seo') || lower.includes('article')) return 'Blog Post'
   if (lower.includes('landing')) return 'Landing Page'
-  if (lower.includes('strategy') || lower.includes('audit') || lower.includes('report')) return 'Strategy'
-  if (lower.includes('image') || lower.includes('visual') || lower.includes('graphic') || lower.includes('photo')) return 'Image'
-  return 'General'
+  if (lower.includes('strategy') || lower.includes('audit') || lower.includes('report')) return 'Ad Copy'
+  if (lower.includes('image') || lower.includes('visual') || lower.includes('graphic') || lower.includes('photo')) return 'Social Post'
+  return 'Social Post'
 }

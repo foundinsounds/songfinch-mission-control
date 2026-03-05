@@ -81,7 +81,7 @@ export async function POST(request) {
       await addContent({
         'Title': `Visual: ${taskName}`,
         'Content Body': `Image URL: ${result.url}\n\nPrompt: ${imagePrompt}\n\nRevised Prompt: ${result.revisedPrompt || 'N/A'}\n\nPreset: ${preset} | Size: ${result.size} | Territory: ${territory || 'N/A'}`,
-        'Content Type': 'Image',
+        'Content Type': 'Social Post',
         'Platform': platform || '',
         'Agent': agent,
         'Campaign': campaign || '',
