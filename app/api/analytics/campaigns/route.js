@@ -162,7 +162,7 @@ export async function GET(request) {
     const [tasks, activity, goals] = await Promise.all([
       getTasks({ noCache: true }),
       getAllActivity(),
-      getGoals({ noCache: true }),
+      getGoals({ noCache: true }).catch(() => []),
     ])
 
     // Group tasks by campaign

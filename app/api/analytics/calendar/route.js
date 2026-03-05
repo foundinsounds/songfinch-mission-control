@@ -207,7 +207,7 @@ export async function GET(request) {
 
     const [tasks, goals] = await Promise.all([
       getTasks({ noCache: true }),
-      getGoals({ noCache: true }),
+      getGoals({ noCache: true }).catch(() => []),
     ])
 
     const { weeks, avgWeeklyOutput } = buildCalendar(tasks, goals)
