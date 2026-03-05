@@ -122,6 +122,46 @@ export async function GET(request) {
   }
 }
 
+// PATCH — Update a goal (e.g., Last Triggered, Tasks Generated, Status)
+export async function PATCH(request) {
+  try {
+    const body = await request.json()
+    const { id, ...updates } = body
+
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 })
+    }
+
+    // Map camelCase to Airtable field names
+    const fields = {}
+    if (updates.lastTriggered !== undefined) fields['Last Triggered'] = updates.lastTriggered
+    if (updates.tasksGenerated !== undefined) fields['Tasks Generated'] = updates.tasksGenerated
+    if (updates.status !== undefined) fields['Status'] = updates.status
+    if (updates.name !== undefined) fields['Name'] = updates.name
+    if (updates.description !== undefined) fields['Description'] = updates.description
+    if (updates.priority !== undefined) fields['Priority'] = updates.priority
+    if (updates.frequency !== undefined) fields['Frequency'] = updates.frequency
+    if (updates.contentType !== undefined) fields['Content Type'] = updates.contentType
+    if (updates.campaign !== undefined) fields['Campaign'] = updates.campaign
+    if (updates.agent !== undefined) fields['Agent'] = updates.agent
+
+    if (Object.keys(fields).length === 0) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
+    }
+
+    const url = `${BASE_URL}/${id}`
+    const data = await airtableRequest(url, {
+      method: 'PATCH',
+      body: JSON.stringify({ fields }),
+    })
+
+    return NextResponse.json({ success: true, goal: data })
+  } catch (error) {
+    console.error('[GOALS] PATCH error:', error.message)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
 // POST — Create a new goal
 export async function POST(request) {
   try {

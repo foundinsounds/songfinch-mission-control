@@ -9,6 +9,7 @@ const PRIMARY_VIEWS = [
   { key: 'approvals', label: 'Approvals' },
   { key: 'calendar', label: 'Calendar' },
   { key: 'campaigns', label: 'Campaigns' },
+  { key: 'timeline', label: 'Timeline' },
   { key: 'analytics', label: 'Analytics' },
 ]
 
@@ -21,6 +22,7 @@ const MORE_VIEWS = [
   { key: 'skills', label: 'Skills' },
   { key: 'batch', label: 'Batch Ops' },
   { key: 'intelligence', label: 'Intelligence' },
+  { key: 'workload', label: 'Workload' },
   { key: 'webhooks', label: 'Webhooks' },
 ]
 
@@ -47,7 +49,7 @@ export default function ViewSwitcher({ currentView, onViewChange, inReview = 0, 
   }
 
   return (
-    <div className="px-4 py-1.5 border-b border-dark-500 flex items-center gap-0.5 shrink-0 bg-dark-800/30">
+    <div className="px-2 sm:px-4 py-1.5 border-b border-dark-500 flex items-center gap-0.5 shrink-0 bg-dark-800/30 overflow-x-auto scrollbar-hide">
       {PRIMARY_VIEWS.map((view) => {
         const badge = getBadge(view.key)
         return (

@@ -2,6 +2,7 @@
 // Analyzes agent config + performance and returns actionable improvements
 
 import { callAI } from '../../../../lib/ai'
+import { MODEL_OPTIONS } from '../../../../lib/constants'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -62,18 +63,26 @@ Generate a complete, detailed system prompt (500-1500 words). Return ONLY the sy
 }
 
 async function generateImprovements(agent) {
+  // Build available models list so the AI doesn't hallucinate model names
+  const modelList = MODEL_OPTIONS.map(m => `  - ${m.value} (${m.label}, ${m.provider})`).join('\n')
+
   const prompt = `Analyze this AI marketing agent and provide 5 specific, actionable improvements.
 
 AGENT DETAILS:
 - Name: ${agent.name}
 - Role: ${agent.role}
 - Type: ${agent.type} (${getTypeLabel(agent.type)})
-- Model: ${agent.model}
+- Current Model: ${agent.model}
 - Temperature: ${agent.temperature}
 - Tasks Completed: ${agent.tasksCompleted || 0}
 - System Prompt Length: ${agent.systemPrompt?.length || 0} characters
 - System Prompt Preview: ${agent.systemPrompt ? `"${agent.systemPrompt.substring(0, 1000)}"` : '(empty)'}
 - Organization: Songfinch (personalized songs platform)
+
+AVAILABLE MODELS (ONLY reference these — do NOT suggest models not on this list):
+${modelList}
+
+IMPORTANT: The agent is already using "${agent.model}". If it's already on the best model for its role, say so — do NOT suggest upgrading to a model that doesn't exist or is older. "claude-sonnet-4-6" is the latest and most capable default model. Only suggest a different model if there's a genuine reason (e.g. cost optimization with Haiku, or using GPT-4o for specific strengths).
 
 Return a JSON array of exactly 5 improvement objects:
 [
@@ -87,7 +96,7 @@ Return a JSON array of exactly 5 improvement objects:
 
 Focus on practical improvements for:
 1. System prompt quality and specificity
-2. Model selection optimization
+2. Model selection optimization (using ONLY the available models listed above)
 3. Temperature tuning
 4. Output quality improvements
 5. Workflow efficiency

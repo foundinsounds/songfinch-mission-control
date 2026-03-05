@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { AGENTS } from '../lib/agents'
 
 function timeAgo(dateStr) {
@@ -40,6 +40,13 @@ const ACTION_LABELS = {
 }
 
 const FILTERS = ['All', 'Tasks', 'Comments', 'Docs', 'Status']
+const TYPE_FILTERS = {
+  All: () => true,
+  Tasks: (item) => ['Task Created', 'Started', 'Approved'].includes(item.type),
+  Comments: (item) => item.type === 'Comment',
+  Docs: (item) => item.type === 'Content Generated',
+  Status: (item) => ['System', 'Error', 'Review Needed'].includes(item.type),
+}
 
 function extractLinks(text) {
   if (!text) return { cleanText: text, links: [] }
@@ -70,10 +77,65 @@ function parseDetails(details) {
 }
 
 export default function LiveFeed({ activity, filter, onFilterChange, collapsed, onToggleCollapse }) {
-  // Sort newest first
-  const sortedActivity = useMemo(() => {
-    return [...activity].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+  const [agentFilter, setAgentFilter] = useState(null)
+  const [now, setNow] = useState(Date.now())
+  const [seenIds, setSeenIds] = useState(new Set())
+  const prevCountRef = useRef(activity.length)
+
+  // Auto-update relative times every 30s
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // Track new items for animation
+  useEffect(() => {
+    if (activity.length > prevCountRef.current) {
+      // New items arrived — they'll get the entry animation
+      const timer = setTimeout(() => {
+        setSeenIds(new Set(activity.map(a => a.id)))
+      }, 2000) // Clear "new" badge after 2s
+      return () => clearTimeout(timer)
+    }
+    prevCountRef.current = activity.length
   }, [activity])
+
+  // Get unique agents from activity
+  const activityAgents = useMemo(() => {
+    const agents = [...new Set(activity.map(a => a.agent).filter(Boolean))].sort()
+    return agents
+  }, [activity])
+
+  // Recent agent activity summary (last 3 unique agents with their most recent action)
+  const recentAgentSummary = useMemo(() => {
+    const seen = new Set()
+    const result = []
+    const sorted = [...activity].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    for (const item of sorted) {
+      if (item.agent && !seen.has(item.agent)) {
+        seen.add(item.agent)
+        result.push(item)
+        if (result.length >= 4) break
+      }
+    }
+    return result
+  }, [activity])
+
+  // Apply both type filter and agent filter, then sort newest first
+  const sortedActivity = useMemo(() => {
+    let filtered = [...activity]
+
+    // Apply type filter
+    const typeFilterFn = TYPE_FILTERS[filter] || TYPE_FILTERS.All
+    filtered = filtered.filter(typeFilterFn)
+
+    // Apply agent filter
+    if (agentFilter) {
+      filtered = filtered.filter(item => item.agent === agentFilter)
+    }
+
+    return filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+  }, [activity, filter, agentFilter])
 
   if (collapsed) {
     return (
@@ -106,7 +168,7 @@ export default function LiveFeed({ activity, filter, onFilterChange, collapsed, 
           <div className="w-2 h-2 rounded-full bg-accent-green pulse-dot"></div>
           <span className="text-sm font-semibold">LIVE FEED</span>
           <span className="text-[10px] bg-dark-600 px-2 py-0.5 rounded-full text-gray-500 ml-auto">
-            {activity.length} events
+            {sortedActivity.length !== activity.length ? `${sortedActivity.length}/` : ''}{activity.length} events
           </span>
           <button
             onClick={onToggleCollapse}
@@ -119,7 +181,7 @@ export default function LiveFeed({ activity, filter, onFilterChange, collapsed, 
           </button>
         </div>
 
-        {/* Filter Tabs */}
+        {/* Type Filter Tabs */}
         <div className="flex gap-1 flex-wrap">
           {FILTERS.map((f) => (
             <button
@@ -135,15 +197,89 @@ export default function LiveFeed({ activity, filter, onFilterChange, collapsed, 
             </button>
           ))}
         </div>
+
+        {/* Agent Filter Row */}
+        {activityAgents.length > 0 && (
+          <div className="flex gap-1 mt-1.5 flex-wrap">
+            <button
+              onClick={() => setAgentFilter(null)}
+              className={`text-[10px] px-2 py-0.5 rounded transition-all ${
+                !agentFilter
+                  ? 'bg-white/10 text-white font-semibold'
+                  : 'text-gray-600 hover:text-gray-400'
+              }`}
+            >
+              All agents
+            </button>
+            {activityAgents.map(name => {
+              const agent = AGENTS.find(a => a.name === name)
+              return (
+                <button
+                  key={name}
+                  onClick={() => setAgentFilter(agentFilter === name ? null : name)}
+                  className={`text-[10px] px-2 py-0.5 rounded transition-all flex items-center gap-1 ${
+                    agentFilter === name
+                      ? 'bg-white/10 text-white font-semibold'
+                      : 'text-gray-600 hover:text-gray-400'
+                  }`}
+                  style={agentFilter === name && agent ? { color: agent.color } : undefined}
+                >
+                  {agent?.emoji && <span className="text-[10px]">{agent.emoji}</span>}
+                  {name}
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
+
+      {/* Agent Activity Summary Strip */}
+      {recentAgentSummary.length > 0 && (
+        <div className="px-4 py-2 border-b border-dark-500/50 bg-dark-700/30">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] text-gray-600 uppercase tracking-wider font-semibold mr-1">Active</span>
+            {recentAgentSummary.map((item) => {
+              const ag = AGENTS.find(a => a.name === item.agent)
+              if (!ag) return null
+              const isRecent = (Date.now() - new Date(item.timestamp).getTime()) < 300000 // 5 min
+              return (
+                <div
+                  key={item.agent}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-full"
+                  style={{ background: `${ag.color}10`, border: `1px solid ${ag.color}25` }}
+                  title={`${ag.name}: ${item.action} "${item.task}"`}
+                >
+                  <span className="text-[10px]">{ag.emoji}</span>
+                  <span className="text-[9px] font-medium" style={{ color: ag.color }}>{ag.name}</span>
+                  {isRecent && <span className="w-1.5 h-1.5 rounded-full bg-accent-green pulse-dot" />}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Activity Items — sorted newest first */}
       <div className="flex-1 overflow-y-auto">
         {sortedActivity.length === 0 && (
           <div className="px-4 py-8 text-center">
-            <div className="text-2xl mb-2">&#9203;</div>
-            <p className="text-[12px] text-gray-500">Waiting for agent activity...</p>
-            <p className="text-[10px] text-gray-600 mt-1">Click "Run Agents" to trigger agents</p>
+            <div className="text-2xl mb-2">{(filter !== 'All' || agentFilter) ? '🔍' : '⏳'}</div>
+            <p className="text-[12px] text-gray-500">
+              {(filter !== 'All' || agentFilter) ? 'No matching activity' : 'Waiting for agent activity...'}
+            </p>
+            <p className="text-[10px] text-gray-600 mt-1">
+              {(filter !== 'All' || agentFilter)
+                ? 'Try changing filters or wait for new events'
+                : 'Click "Run Agents" to trigger agents'}
+            </p>
+            {(filter !== 'All' || agentFilter) && (
+              <button
+                onClick={() => { onFilterChange('All'); setAgentFilter(null) }}
+                className="mt-2 text-[10px] text-accent-orange hover:underline"
+              >
+                Clear all filters
+              </button>
+            )}
           </div>
         )}
         {sortedActivity.map((item) => {
@@ -152,10 +288,16 @@ export default function LiveFeed({ activity, filter, onFilterChange, collapsed, 
           const actionLabel = ACTION_LABELS[item.action]
           const parsed = parseDetails(item.details)
 
+          const isNew = !seenIds.has(item.id) && (Date.now() - new Date(item.timestamp).getTime()) < 300000
+          const isVeryRecent = (Date.now() - new Date(item.timestamp).getTime()) < 60000
+
           return (
             <div
               key={item.id}
-              className="feed-item px-4 py-3 border-b border-dark-500/50 hover:bg-dark-700/50 transition-colors cursor-pointer"
+              className={`feed-item px-4 py-3 border-b border-dark-500/50 hover:bg-dark-700/50 transition-all cursor-pointer ${
+                isNew ? 'animate-feed-entry bg-accent-orange/[0.03]' : ''
+              } ${isVeryRecent ? 'border-l-2 border-l-accent-green' : ''}`}
+              style={isNew ? { animationDelay: `${Math.min(sortedActivity.indexOf(item) * 60, 300)}ms` } : undefined}
             >
               <div className="flex items-start gap-2.5 mb-1.5">
                 {agent ? (

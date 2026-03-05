@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { AGENTS as FALLBACK_AGENTS } from '../lib/agents'
 import { MOCK_TASKS, MOCK_ACTIVITY } from '../lib/mockData'
 import { GOOGLE_DRIVE_FOLDER, AIRTABLE_BASE_URL, VERSION, COUNCIL_NAME } from '../lib/constants'
@@ -18,6 +18,7 @@ import AnalyticsDashboard from '../components/AnalyticsDashboard'
 import CommandBar from '../components/CommandBar'
 import AgentChat from '../components/AgentChat'
 import CampaignPlanner from '../components/CampaignPlanner'
+import CampaignTimeline from '../components/CampaignTimeline'
 import ApprovalWorkflow from '../components/ApprovalWorkflow'
 import AgentScoring from '../components/AgentScoring'
 import TemplateLibrary from '../components/TemplateLibrary'
@@ -29,8 +30,33 @@ import SmartInbox from '../components/SmartInbox'
 import ABTestPipeline from '../components/ABTestPipeline'
 import CouncilIntelligence from '../components/CouncilIntelligence'
 import ViewSwitcher from '../components/ViewSwitcher'
+import ExportButton from '../components/ExportButton'
+import NotificationCenter from '../components/NotificationCenter'
+import MobileBottomNav from '../components/MobileBottomNav'
+import QuickCreateFAB from '../components/QuickCreateFAB'
+import KeyboardShortcutModal from '../components/KeyboardShortcutModal'
+import BatchCreateModal from '../components/BatchCreateModal'
+import WelcomeState from '../components/WelcomeState'
+import AgentHealthSparklines from '../components/AgentHealthSparklines'
+import BulkActions, { useTaskSelection } from '../components/BulkActions'
+import AgentWorkloadBalancer from '../components/AgentWorkloadBalancer'
+import ViewTransition from '../components/ViewTransition'
+import SearchBar from '../components/SearchBar'
+import QuickFiltersBar from '../components/QuickFiltersBar'
+import FooterSparkline from '../components/FooterSparkline'
+import ScrollToTop from '../components/ScrollToTop'
+import Breadcrumb from '../components/Breadcrumb'
+import PipelineStatusBadge from '../components/PipelineStatusBadge'
+import FaviconBadge from '../components/FaviconBadge'
+import AgentMetrics from '../components/AgentMetrics'
+import { useURLState } from '../lib/useURLState'
+import { playApproveSound, playCompleteSound, playErrorSound, playCreateSound, playDropSound, playStatusChangeSound } from '../lib/sounds'
+import { checkEscalations } from '../lib/escalation'
+import { fireConfetti } from '../lib/confetti'
+import { useToast } from '../components/ToastProvider'
 
 export default function Roundtable() {
+  const showToast = useToast()
   const [agents, setAgents] = useState(FALLBACK_AGENTS)
   const [tasks, setTasks] = useState(MOCK_TASKS)
   const [activity, setActivity] = useState(MOCK_ACTIVITY)
@@ -41,6 +67,7 @@ export default function Roundtable() {
   const [feedFilter, setFeedFilter] = useState('All')
   const [dataSource, setDataSource] = useState('loading')
   const [lastSync, setLastSync] = useState(null)
+  const [isSyncing, setIsSyncing] = useState(false)
   const [runningAgents, setRunningAgents] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showCommandBar, setShowCommandBar] = useState(false)
@@ -48,6 +75,30 @@ export default function Roundtable() {
   const [currentView, setCurrentView] = useState('kanban')
   const [feedCollapsed, setFeedCollapsed] = useState(false)
   const [planningCampaign, setPlanningCampaign] = useState(false)
+  const [mobileSidebar, setMobileSidebar] = useState(false)
+  const [mobileFeed, setMobileFeed] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const [showBatchCreate, setShowBatchCreate] = useState(false)
+  const [showMetrics, setShowMetrics] = useState(false)
+  const [focusedTaskId, setFocusedTaskId] = useState(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [quickFilters, setQuickFilters] = useState({ priorities: [], agents: [], contentTypes: [], statuses: [] })
+
+  // Auto-refresh polling interval (ms) — configurable, default 30s
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState(30000)
+
+  // Task selection for bulk operations
+  const { selectedIds, toggleSelect, selectAll, deselectAll, isSelected } = useTaskSelection()
+
+  // Persist view/filter state to URL search params
+  useURLState(
+    {
+      view: [currentView, setCurrentView],
+      agent: [selectedAgent, setSelectedAgent],
+      feed: [feedFilter, setFeedFilter],
+    },
+    { view: 'kanban', agent: null, feed: 'All' }
+  )
 
   // Settings revision counter — bumped when localStorage changes
   const [settingsRev, setSettingsRev] = useState(0)
@@ -86,6 +137,10 @@ export default function Roundtable() {
 
   // Fetch live data from Airtable
   const fetchData = useCallback(async () => {
+    // Skip polling when tab is hidden to save API calls
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+
+    setIsSyncing(true)
     try {
       const res = await fetch('/api/data')
       if (!res.ok) throw new Error('API error')
@@ -97,18 +152,29 @@ export default function Roundtable() {
         const missing = FALLBACK_AGENTS.filter(a => !airtableNames.has(a.name))
         setAgents([...data.agents, ...missing])
       }
-      if (data.tasks && data.tasks.length > 0) {
-        setTasks(data.tasks)
+
+      // Always accept the Airtable tasks — even if empty.
+      // Only fall back to mock data on network / API errors (catch block).
+      if (data.tasks) {
+        if (data.tasks.length > 0) {
+          setTasks(checkEscalations(data.tasks))
+          setDataSource('airtable')
+        } else {
+          setTasks([])
+          setDataSource('airtable-empty')
+        }
       }
+
       if (data.activity && data.activity.length > 0) {
         setActivity(data.activity)
       }
 
-      setDataSource('airtable')
       setLastSync(new Date())
     } catch (err) {
       console.warn('Airtable fetch failed, using mock data:', err.message)
       setDataSource('mock')
+    } finally {
+      setIsSyncing(false)
     }
   }, [])
 
@@ -122,13 +188,44 @@ export default function Roundtable() {
     return { autoRunAgents: true, runInterval: 15, pollInterval: 10 }
   }, [])
 
-  // Initial fetch + polling (uses configured pollInterval)
+  // Initial fetch + visibility-aware auto-polling
   useEffect(() => {
     fetchData()
-    const pollSeconds = getSettings().pollInterval || 15
-    const poller = setInterval(fetchData, pollSeconds * 1000)
-    return () => clearInterval(poller)
-  }, [fetchData, getSettings])
+
+    let poller = null
+
+    function startPolling() {
+      stopPolling()
+      if (autoRefreshInterval > 0) {
+        poller = setInterval(fetchData, autoRefreshInterval)
+      }
+    }
+
+    function stopPolling() {
+      if (poller) {
+        clearInterval(poller)
+        poller = null
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        stopPolling()
+      } else {
+        // Refresh immediately when tab becomes visible, then resume polling
+        fetchData()
+        startPolling()
+      }
+    }
+
+    startPolling()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      stopPolling()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [fetchData, autoRefreshInterval])
 
   // Auto-run agents on configured interval
   useEffect(() => {
@@ -193,13 +290,18 @@ export default function Roundtable() {
         t.id === task.id ? { ...t, status: 'Done' } : t
       ))
       setSelectedTask(null)
+      playApproveSound()
+      fireConfetti({ particleCount: 50 })
+      showToast(`"${task.name}" approved ✓`, 'success')
       setTimeout(fetchData, 1000)
       return true
     } catch (err) {
       console.error('Failed to approve task:', err)
+      playErrorSound()
+      showToast('Failed to approve task', 'error')
       return false
     }
-  }, [fetchData])
+  }, [fetchData, showToast])
 
   // Handle task status update
   const handleUpdateTaskStatus = useCallback(async (task, newStatus) => {
@@ -218,13 +320,74 @@ export default function Roundtable() {
       setTasks(prev => prev.map(t =>
         t.id === task.id ? { ...t, status: newStatus } : t
       ))
+      if (newStatus === 'Done') { playCompleteSound(); fireConfetti({ particleCount: 35 }); showToast(`Task completed ✓`, 'success') }
+      else { playStatusChangeSound(); showToast(`Moved to ${newStatus}`, 'info') }
       setTimeout(fetchData, 1000)
       return true
     } catch (err) {
       console.error('Failed to update task:', err)
+      playErrorSound()
+      showToast('Failed to update task status', 'error')
       return false
     }
-  }, [fetchData])
+  }, [fetchData, showToast])
+
+  // Retry failed task — reset to Assigned and re-trigger
+  const handleRetryTask = useCallback(async (task) => {
+    try {
+      const res = await fetch('/api/tasks/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordId: task.id,
+          fields: { Status: 'Assigned' },
+        }),
+      })
+
+      if (!res.ok) throw new Error('Failed to retry task')
+
+      setTasks(prev => prev.map(t =>
+        t.id === task.id ? { ...t, status: 'Assigned' } : t
+      ))
+      playStatusChangeSound()
+      showToast('Task queued for retry', 'info')
+      setTimeout(fetchData, 1000)
+      return true
+    } catch (err) {
+      console.error('Failed to retry task:', err)
+      playErrorSound()
+      showToast('Failed to retry task', 'error')
+      return false
+    }
+  }, [fetchData, showToast])
+
+  // Dependency management — add/remove blockedBy entries
+  const handleAddDependency = useCallback((taskId, depId) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId) return t
+      const existing = t.blockedBy || []
+      if (existing.includes(depId)) return t
+      return { ...t, blockedBy: [...existing, depId] }
+    }))
+    // Update selected task if it's the one being modified
+    setSelectedTask(prev => {
+      if (!prev || prev.id !== taskId) return prev
+      const existing = prev.blockedBy || []
+      if (existing.includes(depId)) return prev
+      return { ...prev, blockedBy: [...existing, depId] }
+    })
+  }, [])
+
+  const handleRemoveDependency = useCallback((taskId, depId) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId) return t
+      return { ...t, blockedBy: (t.blockedBy || []).filter(id => id !== depId) }
+    }))
+    setSelectedTask(prev => {
+      if (!prev || prev.id !== taskId) return prev
+      return { ...prev, blockedBy: (prev.blockedBy || []).filter(id => id !== depId) }
+    })
+  }, [])
 
   // Run Agents — trigger the cron endpoint manually
   const handleRunAgents = useCallback(async () => {
@@ -233,14 +396,16 @@ export default function Roundtable() {
       const res = await fetch('/api/cron/run-agents')
       const data = await res.json()
       console.log('[Roundtable] Agent run result:', data)
+      showToast('Agents dispatched', 'success')
       // Refresh data after agents run
       setTimeout(fetchData, 2000)
     } catch (err) {
       console.error('Failed to run agents:', err)
+      showToast('Failed to run agents', 'error')
     } finally {
       setTimeout(() => setRunningAgents(false), 3000)
     }
-  }, [fetchData])
+  }, [fetchData, showToast])
 
   // Plan Campaign — trigger CMO content planner
   const handlePlanCampaign = useCallback(async () => {
@@ -249,13 +414,177 @@ export default function Roundtable() {
       const res = await fetch('/api/campaigns/plan', { method: 'POST' })
       const data = await res.json()
       console.log('[Roundtable] Campaign plan result:', data)
+      showToast('Campaign plan created', 'success')
       setTimeout(fetchData, 2000)
     } catch (err) {
       console.error('Failed to plan campaign:', err)
+      showToast('Failed to plan campaign', 'error')
     } finally {
       setTimeout(() => setPlanningCampaign(false), 3000)
     }
-  }, [fetchData])
+  }, [fetchData, showToast])
+
+  // Quick-create task handler (from FAB)
+  const handleCreateTask = useCallback(async (taskData) => {
+    try {
+      const res = await fetch('/api/tasks/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(taskData),
+      })
+      if (res.ok) {
+        const created = await res.json()
+        // Optimistically add to local state
+        setTasks(prev => [{ ...taskData, id: created.id || `temp-${Date.now()}`, createdAt: new Date().toISOString() }, ...prev])
+        playCreateSound()
+        showToast(`Task "${taskData.name}" created`, 'success')
+        setTimeout(fetchData, 1500)
+      } else {
+        // Fallback: add locally with temp id
+        setTasks(prev => [{ ...taskData, id: `temp-${Date.now()}`, createdAt: new Date().toISOString() }, ...prev])
+        playCreateSound()
+        showToast('Task created locally (sync pending)', 'warning')
+      }
+    } catch {
+      // Offline fallback
+      setTasks(prev => [{ ...taskData, id: `temp-${Date.now()}`, createdAt: new Date().toISOString() }, ...prev])
+      showToast('Task saved offline — will sync when online', 'warning')
+    }
+  }, [fetchData, showToast])
+
+  // Welcome state action handler
+  const handleWelcomeAction = useCallback((action) => {
+    switch (action) {
+      case 'create-task': setShowCommandBar(true); break
+      case 'run-agents': handleRunAgents(); break
+      case 'plan-campaign': handlePlanCampaign(); break
+      case 'view-analytics': setCurrentView('analytics'); break
+      default: break
+    }
+  }, [handleRunAgents, handlePlanCampaign])
+
+  // ? key opens shortcut cheatsheet
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
+      if (e.key === '?') {
+        e.preventDefault()
+        setShowShortcuts(s => !s)
+      }
+      if (e.key === 'b' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        setShowBatchCreate(s => !s)
+        showToast('⌨ B → Batch create', 'info')
+      }
+      if (e.key === 'm' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        setShowMetrics(s => !s)
+        showToast('⌨ M → Agent metrics', 'info')
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  // Flattened task list for keyboard navigation (column by column, left to right)
+  const navigableTasks = useMemo(() => {
+    const columnOrder = ['Inbox', 'Assigned', 'In Progress', 'Review', 'Done']
+    const flat = []
+    columnOrder.forEach(col => {
+      tasks.filter(t => t.status === col).forEach(t => flat.push(t))
+    })
+    return flat
+  }, [tasks])
+
+  // j/k/Enter/Escape keyboard navigation
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
+      if (selectedTask || showCommandBar || showSettings || showChat) return
+
+      if (currentView !== 'kanban' && currentView !== 'list') return
+
+      if (e.key === 'j' || e.key === 'ArrowDown') {
+        e.preventDefault()
+        if (navigableTasks.length === 0) return
+        setFocusedTaskId(prev => {
+          if (!prev) return navigableTasks[0]?.id || null
+          const idx = navigableTasks.findIndex(t => t.id === prev)
+          const next = Math.min(idx + 1, navigableTasks.length - 1)
+          return navigableTasks[next]?.id || prev
+        })
+      }
+      if (e.key === 'k' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        if (navigableTasks.length === 0) return
+        setFocusedTaskId(prev => {
+          if (!prev) return navigableTasks[navigableTasks.length - 1]?.id || null
+          const idx = navigableTasks.findIndex(t => t.id === prev)
+          const next = Math.max(idx - 1, 0)
+          return navigableTasks[next]?.id || prev
+        })
+      }
+      if (e.key === 'Enter' && focusedTaskId) {
+        e.preventDefault()
+        const task = navigableTasks.find(t => t.id === focusedTaskId)
+        if (task) setSelectedTask(task)
+      }
+      if (e.key === 'Escape') {
+        setFocusedTaskId(null)
+      }
+      // x to toggle selection on focused task
+      if (e.key === 'x' && focusedTaskId) {
+        e.preventDefault()
+        toggleSelect(focusedTaskId)
+        showToast('⌨ X → Toggled selection', 'info')
+      }
+      // a to approve focused task (if in Review)
+      if (e.key === 'a' && focusedTaskId) {
+        const task = navigableTasks.find(t => t.id === focusedTaskId)
+        if (task && task.status === 'Review') {
+          e.preventDefault()
+          handleApproveTask(task)
+          showToast('⌨ A → Approved task', 'success')
+        }
+      }
+      // h/l/]/[ or ArrowLeft/ArrowRight to cycle focused task between statuses
+      if ((e.key === 'l' || e.key === ']' || e.key === 'ArrowRight') && focusedTaskId) {
+        const task = navigableTasks.find(t => t.id === focusedTaskId)
+        if (task) {
+          const statusOrder = ['Inbox', 'Assigned', 'In Progress', 'Review', 'Done']
+          const idx = statusOrder.indexOf(task.status)
+          if (idx < statusOrder.length - 1) {
+            e.preventDefault()
+            handleUpdateTaskStatus(task, statusOrder[idx + 1])
+            showToast(`⌨ → Moved to ${statusOrder[idx + 1]}`, 'info')
+          }
+        }
+      }
+      if ((e.key === 'h' || e.key === '[' || (e.key === 'ArrowLeft' && !e.metaKey)) && focusedTaskId) {
+        const task = navigableTasks.find(t => t.id === focusedTaskId)
+        if (task) {
+          const statusOrder = ['Inbox', 'Assigned', 'In Progress', 'Review', 'Done']
+          const idx = statusOrder.indexOf(task.status)
+          if (idx > 0) {
+            e.preventDefault()
+            handleUpdateTaskStatus(task, statusOrder[idx - 1])
+            showToast(`⌨ ← Moved to ${statusOrder[idx - 1]}`, 'info')
+          }
+        }
+      }
+      // d to quickly mark focused task as Done
+      if (e.key === 'd' && focusedTaskId && !e.metaKey && !e.ctrlKey) {
+        const task = navigableTasks.find(t => t.id === focusedTaskId)
+        if (task && task.status !== 'Done') {
+          e.preventDefault()
+          handleUpdateTaskStatus(task, 'Done')
+          showToast('⌨ D → Marked as Done', 'success')
+        }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [navigableTasks, focusedTaskId, selectedTask, showCommandBar, showSettings, showChat, currentView, toggleSelect])
 
   // Command Bar handler
   const handleCommand = useCallback((command, entity) => {
@@ -337,16 +666,73 @@ export default function Roundtable() {
         }
         break
       case 'create-task':
-        // Future: open create task modal
-        console.log('[Command] Create task:', entity)
+        // Command bar task creation — create task with entity as name
+        if (entity) {
+          handleCreateTask({ name: entity, status: 'Inbox', priority: 'Medium' })
+        }
         break
       default:
         console.log('[Command]', command, entity)
     }
-  }, [handleRunAgents, fetchData, tasks])
+  }, [handleRunAgents, handleCreateTask, fetchData, tasks])
 
-  // Board/List views always show all tasks — sidebar selection highlights but doesn't filter
-  const filteredTasks = tasks
+  // Search filter + quick filters across all task fields
+  const filteredTasks = useMemo(() => {
+    let result = tasks
+
+    // Apply quick filters first
+    const { priorities, agents: agentFilters, contentTypes, statuses } = quickFilters
+    if (priorities?.length > 0) {
+      result = result.filter(t => priorities.includes(t.priority))
+    }
+    if (agentFilters?.length > 0) {
+      result = result.filter(t => t.agent && agentFilters.includes(t.agent))
+    }
+    if (contentTypes?.length > 0) {
+      result = result.filter(t => t.contentType && contentTypes.includes(t.contentType))
+    }
+    if (statuses?.length > 0) {
+      result = result.filter(t => t.status && statuses.includes(t.status))
+    }
+
+    // Apply search query on top
+    if (searchQuery && searchQuery.trim().length > 0) {
+      const q = searchQuery.toLowerCase().trim()
+      result = result.filter(t =>
+        (t.name && t.name.toLowerCase().includes(q)) ||
+        (t.description && t.description.toLowerCase().includes(q)) ||
+        (t.agent && t.agent.toLowerCase().includes(q)) ||
+        (t.status && t.status.toLowerCase().includes(q)) ||
+        (t.priority && t.priority.toLowerCase().includes(q)) ||
+        (t.contentType && t.contentType.toLowerCase().includes(q)) ||
+        (t.campaign && t.campaign.toLowerCase().includes(q)) ||
+        (t.platform && t.platform.toLowerCase().includes(q)) ||
+        (t.tags && t.tags.some(tag => tag.toLowerCase().includes(q)))
+      )
+    }
+
+    return result
+  }, [tasks, searchQuery, quickFilters])
+
+  // Generate pseudo-historical sparkline trends from current task data
+  const generateSparkTrend = useCallback((current, seed = 0, volatility = 0.35) => {
+    const pts = 8
+    const result = []
+    // Deterministic seed so sparklines don't jitter on re-render
+    let s = seed + 7
+    const rand = () => { s = (s * 16807 + 0) % 2147483647; return (s % 1000) / 1000 }
+    // Start from a plausible past value and converge to current
+    let val = Math.max(0, current * (0.4 + rand() * 0.6))
+    for (let i = 0; i < pts; i++) {
+      result.push(Math.round(val))
+      const progress = i / (pts - 1)
+      const target = current
+      val = val + (target - val) * (0.15 + progress * 0.3) + (rand() - 0.5) * current * volatility
+      val = Math.max(0, val)
+    }
+    result[pts - 1] = current // ensure last point matches exactly
+    return result
+  }, [])
 
   const stats = {
     agentsActive: agents.filter(a => a.status === 'Working' || a.status === 'Active').length,
@@ -358,14 +744,25 @@ export default function Roundtable() {
     contentPieces: tasks.filter(t => t.status === 'Done').length,
   }
 
+  const sparklines = useMemo(() => ({
+    queue: generateSparkTrend(stats.tasksInQueue, 1),
+    review: generateSparkTrend(stats.inReview, 2),
+    done: generateSparkTrend(stats.completed, 3, 0.25),
+    content: generateSparkTrend(stats.contentPieces, 4, 0.25),
+  }), [stats.tasksInQueue, stats.inReview, stats.completed, stats.contentPieces, generateSparkTrend])
+
   return (
     <div className="h-screen flex flex-col overflow-hidden">
+      <FaviconBadge tasks={tasks} />
       {/* Top Header Bar */}
       <StatsHeader
         stats={stats}
+        sparklines={sparklines}
         currentTime={currentTime}
         dataSource={dataSource}
         lastSync={lastSync}
+        isSyncing={isSyncing}
+        onRefresh={fetchData}
         theme={theme}
         onToggleTheme={toggleTheme}
         onRunAgents={handleRunAgents}
@@ -373,35 +770,92 @@ export default function Roundtable() {
         onPlanCampaign={handlePlanCampaign}
         planningCampaign={planningCampaign}
         onOpenSettings={() => setShowSettings(true)}
+        onOpenMetrics={() => setShowMetrics(true)}
+        onToggleSidebar={() => setMobileSidebar(s => !s)}
+        onToggleFeed={() => setMobileFeed(f => !f)}
+        notificationSlot={<NotificationCenter tasks={tasks} activity={activity} />}
+        pipelineSlot={<PipelineStatusBadge />}
       />
 
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Agent Sidebar */}
-        <AgentSidebar
-          agents={agents}
-          selectedAgent={selectedAgent}
-          onSelectAgent={(name) => setSelectedAgent(selectedAgent === name ? null : name)}
-          onConfigAgent={(agent) => setConfigAgent(agent)}
-          tasks={tasks}
-        />
+        {/* Mobile Sidebar Overlay */}
+        {mobileSidebar && (
+          <div className="md:hidden mobile-sidebar-overlay" onClick={() => setMobileSidebar(false)} />
+        )}
+
+        {/* Agent Sidebar — hidden on mobile unless toggled */}
+        <div className={`${mobileSidebar ? 'mobile-sidebar block' : 'hidden'} md:block`}>
+          <AgentSidebar
+            agents={agents}
+            selectedAgent={selectedAgent}
+            onSelectAgent={(name) => { setSelectedAgent(selectedAgent === name ? null : name); setMobileSidebar(false) }}
+            onConfigAgent={(agent) => { setConfigAgent(agent); setMobileSidebar(false) }}
+            tasks={tasks}
+          />
+        </div>
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Breadcrumb Navigation Trail */}
+          <Breadcrumb
+            currentView={currentView}
+            selectedAgent={selectedAgent}
+            selectedTask={selectedTask}
+            onNavigate={({ view, agent, task }) => {
+              if (view) setCurrentView(view)
+              setSelectedAgent(agent || null)
+              if (task === null) setSelectedTask(null)
+            }}
+          />
+
           {/* View Switcher — Primary tabs + More dropdown */}
           <ViewSwitcher currentView={currentView} onViewChange={setCurrentView} inReview={stats.inReview} inboxCount={tasks.filter(t => t.status !== 'Done' && t.status !== 'Archived').length} />
 
+          {/* Global Search Bar */}
+          {(currentView === 'kanban' || currentView === 'list') && (
+            <SearchBar
+              value={searchQuery}
+              onChange={setSearchQuery}
+              resultCount={filteredTasks.length}
+              totalCount={tasks.length}
+            />
+          )}
+
+          {/* Quick Filters Bar */}
+          {(currentView === 'kanban' || currentView === 'list') && (
+            <QuickFiltersBar
+              tasks={tasks}
+              agents={agents}
+              filters={quickFilters}
+              onFiltersChange={setQuickFilters}
+            />
+          )}
+
           {/* View Content */}
-          <div className="flex-1 overflow-auto">
+          <ViewTransition viewKey={currentView} className="flex-1 overflow-auto">
             {currentView === 'kanban' && (
-              <KanbanBoard
-                tasks={filteredTasks}
-                agents={agents}
-                selectedAgent={selectedAgent}
-                onTaskClick={setSelectedTask}
-                onQuickApprove={handleApproveTask}
-                onRequestChanges={(task) => setSelectedTask(task)}
-              />
+              filteredTasks.length === 0 ? (
+                <WelcomeState agents={agents} onAction={handleWelcomeAction} dataSource={dataSource} onRefresh={fetchData} />
+              ) : (
+                <KanbanBoard
+                  tasks={filteredTasks}
+                  allTasks={tasks}
+                  agents={agents}
+                  selectedAgent={selectedAgent}
+                  onTaskClick={setSelectedTask}
+                  onQuickApprove={handleApproveTask}
+                  onRequestChanges={(task) => setSelectedTask(task)}
+                  onRetry={handleRetryTask}
+                  onStatusChange={handleUpdateTaskStatus}
+                  isTaskSelected={isSelected}
+                  onToggleTaskSelect={toggleSelect}
+                  focusedTaskId={focusedTaskId}
+                  loading={dataSource === 'loading'}
+                  onCreateTask={handleCreateTask}
+                  searchQuery={searchQuery}
+                />
+              )
             )}
             {currentView === 'list' && (
               <ListView
@@ -410,15 +864,22 @@ export default function Roundtable() {
                 selectedAgent={selectedAgent}
                 onTaskClick={setSelectedTask}
                 onQuickApprove={handleApproveTask}
+                onRetry={handleRetryTask}
               />
             )}
             {currentView === 'agents' && (
-              <AgentActivityView
-                agents={agents}
-                tasks={tasks}
-                activity={activity}
-                onAgentClick={(agent) => setConfigAgent(agent)}
-              />
+              <div className="space-y-0">
+                {/* Agent health sparklines strip */}
+                <div className="px-4 py-2 border-b border-dark-500 bg-dark-800/30">
+                  <AgentHealthSparklines agents={agents} tasks={tasks} compact />
+                </div>
+                <AgentActivityView
+                  agents={agents}
+                  tasks={tasks}
+                  activity={activity}
+                  onAgentClick={(agent) => setConfigAgent(agent)}
+                />
+              </div>
             )}
             {currentView === 'content' && (
               <ContentView />
@@ -431,6 +892,16 @@ export default function Roundtable() {
             )}
             {currentView === 'campaigns' && (
               <CampaignPlanner tasks={tasks} agents={agents} />
+            )}
+            {currentView === 'timeline' && (
+              <CampaignTimeline
+                tasks={filteredTasks}
+                onSelectTask={setSelectedTask}
+                onFilterByCampaign={(campaign) => {
+                  setSearchQuery(campaign)
+                  setCurrentView('kanban')
+                }}
+              />
             )}
             {currentView === 'approvals' && (
               <ApprovalWorkflow tasks={tasks} agents={agents} onTaskClick={setSelectedTask} onApprove={handleApproveTask} />
@@ -464,53 +935,102 @@ export default function Roundtable() {
             {currentView === 'intelligence' && (
               <CouncilIntelligence agents={agents} tasks={tasks} activity={activity} />
             )}
+            {currentView === 'workload' && (
+              <AgentWorkloadBalancer tasks={tasks} agents={agents} />
+            )}
             {currentView === 'webhooks' && (
               <WebhookManager />
             )}
             {currentView === 'analytics' && (
-              <AnalyticsDashboard
-                agents={agents}
-                tasks={tasks}
-                activity={activity}
-                onConfigAgent={(agent) => setConfigAgent(agent)}
-              />
+              <div className="space-y-0">
+                <AnalyticsDashboard
+                  agents={agents}
+                  tasks={tasks}
+                  activity={activity}
+                  onConfigAgent={(agent) => setConfigAgent(agent)}
+                />
+                {/* Full agent health sparklines at bottom */}
+                <div className="px-4 py-4 border-t border-dark-500">
+                  <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Agent Health Monitor</h3>
+                  <AgentHealthSparklines agents={agents} tasks={tasks} />
+                </div>
+              </div>
             )}
-          </div>
+          </ViewTransition>
         </div>
 
-        {/* Live Feed */}
-        <LiveFeed
-          activity={activity}
-          filter={feedFilter}
-          onFilterChange={setFeedFilter}
-          collapsed={feedCollapsed}
-          onToggleCollapse={() => setFeedCollapsed(c => !c)}
-        />
+        {/* Mobile Feed Overlay */}
+        {mobileFeed && (
+          <div className="md:hidden mobile-sidebar-overlay" onClick={() => setMobileFeed(false)} />
+        )}
+
+        {/* Live Feed — hidden on mobile unless toggled */}
+        <div className={`${mobileFeed ? 'mobile-feed block' : 'hidden'} md:block`}>
+          <LiveFeed
+            activity={activity}
+            filter={feedFilter}
+            onFilterChange={setFeedFilter}
+            collapsed={feedCollapsed}
+            onToggleCollapse={() => setFeedCollapsed(c => !c)}
+          />
+        </div>
       </div>
 
       {/* Footer */}
-      <footer className="footer-bar border-t border-dark-500 px-6 py-2 flex items-center justify-between shrink-0">
-        <div className="text-[11px] text-gray-600">
-          Roundtable {VERSION} — {COUNCIL_NAME}
+      <footer className="footer-bar border-t border-dark-500 px-3 sm:px-6 py-2 pb-14 flex items-center justify-between shrink-0">
+        <div className="text-[10px] sm:text-[11px] text-gray-600 truncate flex items-center gap-2">
+          <span className="hidden sm:inline">Roundtable {VERSION} — {COUNCIL_NAME}</span>
+          <span className="sm:hidden">RT {VERSION}</span>
+          {/* Activity sparkline moved to fixed bottom strip */}
         </div>
-        <div className="flex items-center gap-4 text-[11px] text-gray-600">
+        <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-[11px] text-gray-600">
+          {/* Sync indicator */}
+          <div className="flex items-center gap-1.5" title={lastSync ? `Last synced: ${lastSync.toLocaleTimeString()}` : 'Not synced yet'}>
+            {isSyncing ? (
+              <svg className="w-3 h-3 animate-spin text-accent-orange" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <div className={`w-1.5 h-1.5 rounded-full transition-colors duration-500 ${lastSync && (Date.now() - lastSync.getTime()) < 30000 ? 'bg-accent-green pulse-dot' : 'bg-gray-600'}`} />
+            )}
+            <span className="hidden lg:inline">
+              {isSyncing ? (
+                <span className="text-accent-orange">Syncing…</span>
+              ) : lastSync ? (
+                `Synced ${Math.floor((Date.now() - lastSync.getTime()) / 1000)}s ago`
+              ) : (
+                'Not synced'
+              )}
+            </span>
+            <button
+              onClick={() => !isSyncing && fetchData()}
+              disabled={isSyncing}
+              className="ml-0.5 p-0.5 rounded hover:bg-dark-600 transition-colors disabled:opacity-30"
+              title="Refresh now (⌘R)"
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isSyncing ? 'animate-spin' : ''}>
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+            </button>
+          </div>
           <a
             href={GOOGLE_DRIVE_FOLDER}
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-gray-400 transition-colors flex items-center gap-1"
+            className="hidden md:flex hover:text-gray-400 transition-colors items-center gap-1"
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M22 12h-6l-2 3H9l-2-3H1" />
               <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
             </svg>
-            Google Drive
+            Drive
           </a>
           <a
             href={AIRTABLE_BASE_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-gray-400 transition-colors flex items-center gap-1"
+            className="hidden md:flex hover:text-gray-400 transition-colors items-center gap-1"
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="3" y="3" width="7" height="7" />
@@ -520,15 +1040,114 @@ export default function Roundtable() {
             </svg>
             Airtable
           </a>
-          <span className="opacity-40">|</span>
-          <span>{agents.length} agents deployed</span>
+          <span className="hidden sm:inline opacity-40">|</span>
+          <span className="hidden sm:inline">{agents.length} agents</span>
+          <ExportButton tasks={tasks} activity={activity} />
           <span className="opacity-40">|</span>
           <button onClick={() => setShowChat(!showChat)}
             className="hover:text-accent-orange transition-colors flex items-center gap-1">
-            {'\u{1F4AC}'} Chat
+            💬 <span className="hidden sm:inline">Chat</span>
           </button>
         </div>
       </footer>
+
+      {/* Activity Strip — fixed bottom bar with sparkline + stats */}
+      <FooterSparkline activity={activity} tasks={tasks} />
+
+      {/* Bulk Actions Toolbar — floats at bottom when tasks are selected */}
+      <BulkActions
+        selectedIds={selectedIds}
+        tasks={tasks}
+        agents={agents}
+        onApproveAll={async (ids) => {
+          for (const id of ids) {
+            const task = tasks.find(t => t.id === id)
+            if (task) await handleApproveTask(task)
+          }
+          deselectAll()
+        }}
+        onStatusChange={async (ids, status) => {
+          for (const id of ids) {
+            const task = tasks.find(t => t.id === id)
+            if (task) await handleUpdateTaskStatus(task, status)
+          }
+          deselectAll()
+        }}
+        onAssign={async (ids, agentName) => {
+          let ok = 0
+          for (const id of ids) {
+            try {
+              await fetch('/api/tasks/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recordId: id, fields: { Agent: agentName } }),
+              })
+              setTasks(prev => prev.map(t => t.id === id ? { ...t, agent: agentName } : t))
+              ok++
+            } catch (err) { console.error('Bulk assign error:', err) }
+          }
+          showToast(`Assigned ${ok} task${ok !== 1 ? 's' : ''} to ${agentName}`, 'success')
+          deselectAll()
+          setTimeout(fetchData, 1000)
+        }}
+        onPriorityChange={async (ids, priority) => {
+          const label = priority.charAt(0).toUpperCase() + priority.slice(1)
+          let ok = 0
+          for (const id of ids) {
+            try {
+              await fetch('/api/tasks/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recordId: id, fields: { Priority: label } }),
+              })
+              setTasks(prev => prev.map(t => t.id === id ? { ...t, priority: label } : t))
+              ok++
+            } catch (err) { console.error('Bulk priority error:', err) }
+          }
+          showToast(`Updated priority to ${label} for ${ok} task${ok !== 1 ? 's' : ''}`, 'info')
+          deselectAll()
+          setTimeout(fetchData, 1000)
+        }}
+        onExportToDrive={async (ids) => {
+          showToast(`Exporting ${ids.length} task${ids.length !== 1 ? 's' : ''} to Drive...`, 'info')
+          try {
+            const res = await fetch('/api/export/drive', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ taskIds: ids }),
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Export failed')
+            showToast(`Exported ${data.count} task${data.count !== 1 ? 's' : ''} to Google Drive`, 'success')
+            deselectAll()
+            setTimeout(fetchData, 1000)
+          } catch (err) {
+            showToast(`Drive export failed: ${err.message}`, 'error')
+          }
+        }}
+        onDeselectAll={deselectAll}
+      />
+
+      {/* Mobile Bottom Navigation */}
+      <MobileBottomNav
+        currentView={currentView}
+        onViewChange={setCurrentView}
+        inReview={stats.inReview}
+        inboxCount={tasks.filter(t => t.status !== 'Done' && t.status !== 'Archived').length}
+        boardCount={stats.tasksInQueue}
+        agentsActive={stats.agentsActive}
+      />
+
+      {/* Scroll to Top */}
+      <ScrollToTop />
+
+      {/* Quick Create FAB */}
+      <QuickCreateFAB onCreateTask={handleCreateTask} agents={agents} />
+
+      {/* Keyboard Shortcut Cheatsheet */}
+      <KeyboardShortcutModal isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
+      <BatchCreateModal isOpen={showBatchCreate} onClose={() => setShowBatchCreate(false)} onCreateTask={handleCreateTask} />
+      {showMetrics && <AgentMetrics tasks={tasks} agents={agents} activity={activity} onClose={() => setShowMetrics(false)} />}
 
       {/* Task Detail Modal */}
       {selectedTask && (
@@ -538,6 +1157,40 @@ export default function Roundtable() {
           onClose={() => setSelectedTask(null)}
           onApprove={handleApproveTask}
           onUpdateStatus={handleUpdateTaskStatus}
+          allTasks={tasks}
+          taskPosition={navigableTasks.length > 0 ? { current: navigableTasks.findIndex(t => t.id === selectedTask.id) + 1, total: navigableTasks.length } : null}
+          onNextTask={(() => {
+            const idx = navigableTasks.findIndex(t => t.id === selectedTask.id)
+            if (idx < navigableTasks.length - 1) return () => setSelectedTask(navigableTasks[idx + 1])
+            return null
+          })()}
+          onPrevTask={(() => {
+            const idx = navigableTasks.findIndex(t => t.id === selectedTask.id)
+            if (idx > 0) return () => setSelectedTask(navigableTasks[idx - 1])
+            return null
+          })()}
+          onAddDependency={(depId) => handleAddDependency(selectedTask.id, depId)}
+          onRemoveDependency={(depId) => handleRemoveDependency(selectedTask.id, depId)}
+          onAssignAgent={async (agent) => {
+            try {
+              const res = await fetch('/api/tasks/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recordId: selectedTask.id, fields: { Agent: agent.name } }),
+              })
+              if (!res.ok) throw new Error('Agent assignment failed')
+              // Update local state immediately
+              setTasks(prev => prev.map(t => t.id === selectedTask.id ? { ...t, agent: agent.name, status: t.status === 'Inbox' ? 'Assigned' : t.status } : t))
+              setSelectedTask(prev => prev ? { ...prev, agent: agent.name, status: prev.status === 'Inbox' ? 'Assigned' : prev.status } : prev)
+              showToast(`Assigned to ${agent.name}`, 'success')
+              setTimeout(fetchData, 1000)
+            } catch (err) {
+              console.error('Agent assignment error:', err)
+              showToast('Failed to assign agent', 'error')
+            }
+          }}
+          onRefreshData={() => setTimeout(fetchData, 1000)}
+          showToast={showToast}
           onEditTask={async (task, updates) => {
             try {
               const res = await fetch('/api/tasks/update', {
@@ -547,9 +1200,13 @@ export default function Roundtable() {
               })
               if (!res.ok) throw new Error('Update failed')
               setTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...Object.fromEntries(Object.entries(updates).map(([k, v]) => [k === 'Name' ? 'name' : k === 'Description' ? 'description' : k === 'Content Type' ? 'contentType' : k === 'Priority' ? 'priority' : k, v])) } : t))
+              showToast('Task updated', 'success')
               setTimeout(fetchData, 1000)
               return true
-            } catch { return false }
+            } catch {
+              showToast('Failed to update task', 'error')
+              return false
+            }
           }}
         />
       )}

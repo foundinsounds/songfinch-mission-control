@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { MODEL_OPTIONS, MODEL_LEGACY_MAP } from '../lib/constants'
 import PixelAgents from './PixelAgents'
+import AgentPerformanceChart from './AgentPerformanceChart'
 
 function resolveModel(m) {
   const resolved = MODEL_LEGACY_MAP[m] || m || 'claude-sonnet-4-6'
@@ -416,6 +417,11 @@ export default function AnalyticsDashboard({ agents, tasks, activity, onConfigAg
       {/* ═══ AGENTS TAB ═══ */}
       {tab === 'agents' && (
         <>
+          {/* Performance Comparison Chart */}
+          <div className="mb-6">
+            <AgentPerformanceChart tasks={tasks} agents={agents} />
+          </div>
+
           <div className="mb-6">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Agent Leaderboard</h3>
             <div className="bg-dark-700 rounded-lg border border-dark-500 overflow-hidden">

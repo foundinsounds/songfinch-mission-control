@@ -1,7 +1,13 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { AGENTS } from '../lib/agents'
+import { TaskTimeDetail } from './TaskTimeTracker'
+import { ContentPreviewLarge } from './ContentPreview'
+import AgentSuggestions from './AgentSuggestions'
+import TaskDependencies from './TaskDependencies'
+import OutputPreview from './OutputPreview'
+import TaskTimer from './TaskTimer'
 
 const PRIORITY_COLORS = {
   High: 'bg-red-500/10 text-red-400 border-red-500/20',
@@ -191,7 +197,7 @@ function getLatestOutput(raw) {
   return idx >= 0 ? raw.substring(0, idx).trim() : raw.trim()
 }
 
-export default function TaskModal({ task, agent, onClose, onApprove, onUpdateStatus, onFeedback, onEditTask }) {
+export default function TaskModal({ task, agent, onClose, onApprove, onUpdateStatus, onFeedback, onEditTask, allTasks, onAssignAgent, onAddDependency, onRemoveDependency, onNextTask, onPrevTask, taskPosition, onRefreshData, showToast }) {
   const [approving, setApproving] = useState(false)
   const [approveStatus, setApproveStatus] = useState(null) // 'success' | 'error' | null
   const [feedbackText, setFeedbackText] = useState('')
@@ -205,6 +211,27 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
   const [editFields, setEditFields] = useState({ name: task.name || '', description: task.description || '', contentType: task.contentType || '', priority: task.priority || 'Medium' })
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState(null)
+  const [exportingToDrive, setExportingToDrive] = useState(false)
+  const [driveExportStatus, setDriveExportStatus] = useState(null) // 'success' | 'error' | null
+  const [driveExportUrl, setDriveExportUrl] = useState(null)
+
+  // Keyboard navigation: ↑/↓ or j/k to cycle tasks without closing modal
+  const handleKeyNav = useCallback((e) => {
+    // Don't intercept when typing in inputs/textareas
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return
+    if (e.key === 'ArrowDown' || e.key === 'j') {
+      e.preventDefault()
+      onNextTask?.()
+    } else if (e.key === 'ArrowUp' || e.key === 'k') {
+      e.preventDefault()
+      onPrevTask?.()
+    }
+  }, [onNextTask, onPrevTask])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyNav)
+    return () => window.removeEventListener('keydown', handleKeyNav)
+  }, [handleKeyNav])
 
   const isEditable = task.status === 'In Progress' || task.status === 'Assigned' || task.status === 'Inbox'
 
@@ -304,6 +331,34 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
     }
   }
 
+  // ---- Drive Export ----
+  const canExportToDrive = task.output && !hasDriveLink && !driveExportStatus
+  const handleExportToDrive = async () => {
+    setExportingToDrive(true)
+    setDriveExportStatus(null)
+    try {
+      const res = await fetch('/api/export/drive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: task.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Export failed')
+
+      setDriveExportStatus('success')
+      const exportedUrl = data.results?.exported?.[0]?.driveUrl
+      if (exportedUrl) setDriveExportUrl(exportedUrl)
+      showToast?.(`Exported to Google Drive`, 'success')
+      onRefreshData?.()
+    } catch (err) {
+      console.error('Drive export error:', err)
+      setDriveExportStatus('error')
+      showToast?.(`Drive export failed: ${err.message}`, 'error')
+    } finally {
+      setExportingToDrive(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
@@ -337,6 +392,7 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
             </div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-bold text-gray-100">{task.name}</h2>
+              <TaskTimer taskId={task.id} />
               {isEditable && !isEditing && (
                 <button onClick={() => setIsEditing(true)} className="text-gray-500 hover:text-accent-orange transition-colors p-1" title="Edit task">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -347,14 +403,46 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
               )}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-white transition-colors p-1"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Task nav buttons */}
+            {(onPrevTask || onNextTask) && (
+              <div className="flex items-center gap-0.5 mr-2">
+                <button
+                  onClick={onPrevTask}
+                  disabled={!onPrevTask || taskPosition?.current <= 1}
+                  className="text-gray-500 hover:text-white disabled:text-dark-400 disabled:cursor-not-allowed transition-colors p-1 rounded hover:bg-dark-600"
+                  title="Previous task (↑ or k)"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="18 15 12 9 6 15" />
+                  </svg>
+                </button>
+                {taskPosition && (
+                  <span className="text-[9px] text-gray-600 font-mono tabular-nums px-1 min-w-[32px] text-center">
+                    {taskPosition.current}/{taskPosition.total}
+                  </span>
+                )}
+                <button
+                  onClick={onNextTask}
+                  disabled={!onNextTask || taskPosition?.current >= taskPosition?.total}
+                  className="text-gray-500 hover:text-white disabled:text-dark-400 disabled:cursor-not-allowed transition-colors p-1 rounded hover:bg-dark-600"
+                  title="Next task (↓ or j)"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+              </div>
+            )}
+            <button
+              onClick={onClose}
+              className="text-gray-500 hover:text-white transition-colors p-1"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -564,6 +652,54 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
             </div>
           )}
 
+          {/* Agent Suggestions — shown when no agent assigned */}
+          {!agent && task.contentType && (
+            <div className="mb-5">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-orange">
+                  <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                Suggested Agents
+              </h3>
+              <AgentSuggestions
+                task={task}
+                allTasks={allTasks || []}
+                onAssign={onAssignAgent}
+              />
+            </div>
+          )}
+
+          {/* Content Preview */}
+          {task.contentType && (
+            <div className="mb-5">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Content Preview</h3>
+              <ContentPreviewLarge task={task} />
+            </div>
+          )}
+
+          {/* Time Tracking */}
+          <div className="mb-5">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Time Tracking</h3>
+            <div className="p-3 bg-dark-600 rounded-lg">
+              <TaskTimeDetail task={task} />
+            </div>
+          </div>
+
+          {/* Dependencies */}
+          {allTasks && allTasks.length > 0 && (
+            <div className="mb-5">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Dependencies</h3>
+              <div className="p-3 bg-dark-600 rounded-lg">
+                <TaskDependencies
+                  task={task}
+                  allTasks={allTasks}
+                  onAddDependency={onAddDependency}
+                  onRemoveDependency={onRemoveDependency}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Description */}
           <div className="mb-5">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Description</h3>
@@ -614,23 +750,26 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
           {latestOutput && (
             <div className="mb-5">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Output {hasRevisions ? `(v${currentVersion} — Latest)` : 'Preview'}
-                </h3>
                 {hasRevisions && (
-                  <button
-                    onClick={() => setShowRevisionHistory(!showRevisionHistory)}
-                    className="text-[10px] px-2 py-1 rounded bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors border border-purple-500/20"
-                  >
-                    {showRevisionHistory ? 'Hide' : 'Show'} History ({revisions.length} revision{revisions.length > 1 ? 's' : ''})
-                  </button>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <span className="text-[10px] text-gray-500">v{currentVersion} — Latest</span>
+                    <button
+                      onClick={() => setShowRevisionHistory(!showRevisionHistory)}
+                      className="text-[10px] px-2 py-1 rounded bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors border border-purple-500/20"
+                    >
+                      {showRevisionHistory ? 'Hide' : 'Show'} History ({revisions.length} revision{revisions.length > 1 ? 's' : ''})
+                    </button>
+                  </div>
                 )}
               </div>
-              <div className="bg-dark-900 rounded-lg p-4 border border-dark-500">
-                <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono leading-relaxed">
-                  {latestOutput}
-                </pre>
-              </div>
+              <OutputPreview
+                output={latestOutput}
+                contentType={task.contentType}
+                taskName={task.name}
+                canvaLink={task.canvaLink}
+                driveLink={task.driveLink}
+                platforms={task.platform}
+              />
             </div>
           )}
 
@@ -845,6 +984,32 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
             )}
           </div>
           <div className="flex gap-2">
+            {/* Clone Task */}
+            <button
+              onClick={async () => {
+                try {
+                  const res = await fetch('/api/tasks/duplicate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ taskId: task.id }),
+                  })
+                  const data = await res.json()
+                  if (!res.ok) throw new Error(data.error || 'Clone failed')
+                  showToast?.(`Cloned: "${data.name}"`, 'success')
+                  onRefreshData?.()
+                } catch (err) {
+                  showToast?.(`Clone failed: ${err.message}`, 'error')
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs bg-dark-600 text-gray-300 border border-dark-500 hover:bg-dark-500 hover:text-gray-200 transition-colors"
+              title="Duplicate this task"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+              Clone
+            </button>
             {(hasDriveLink || hasCanvaLink) && (
               <div className="flex gap-1 mr-2">
                 {hasDriveLink && (
@@ -870,6 +1035,49 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
                   </a>
                 )}
               </div>
+            )}
+            {/* Export to Drive — shown when task has output but no Drive link */}
+            {canExportToDrive && (
+              <button
+                onClick={handleExportToDrive}
+                disabled={exportingToDrive}
+                className="text-xs px-3 py-1.5 rounded-md bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors border border-blue-500/20 flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {exportingToDrive ? (
+                  <>
+                    <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                    </svg>
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <DriveIcon size={12} />
+                    Export to Drive
+                  </>
+                )}
+              </button>
+            )}
+            {driveExportStatus === 'success' && (
+              <a
+                href={driveExportUrl || 'https://drive.google.com'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs px-3 py-1.5 rounded-md bg-accent-green/10 text-accent-green flex items-center gap-1.5 hover:bg-accent-green/20 transition-colors"
+              >
+                <CheckCircleIcon size={12} />
+                Exported
+                <ExternalLinkIcon size={10} />
+              </a>
+            )}
+            {driveExportStatus === 'error' && (
+              <button
+                onClick={() => { setDriveExportStatus(null); handleExportToDrive() }}
+                className="text-xs px-3 py-1.5 rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors border border-red-500/20 flex items-center gap-1.5"
+              >
+                <DriveIcon size={12} />
+                Retry Export
+              </button>
             )}
             {isReview && !approveStatus && !feedbackStatus && (
               <button

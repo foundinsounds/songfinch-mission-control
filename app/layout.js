@@ -1,4 +1,5 @@
 import './globals.css'
+import { ToastProvider } from '../components/ToastProvider'
 
 export const metadata = {
   title: 'Roundtable — where AI plans',
@@ -22,7 +23,7 @@ export default function RootLayout({ children }) {
         }} />
       </head>
       <body className="bg-dark-900 text-white antialiased">
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   )

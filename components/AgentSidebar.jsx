@@ -61,6 +61,16 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onC
     return tasks.filter(t => t.agent === agentName && t.status === 'Assigned').length
   }
 
+  const getAgentTaskBreakdown = (agentName) => {
+    const agentTasks = tasks.filter(t => t.agent === agentName && t.status !== 'Done')
+    return {
+      total: agentTasks.length,
+      inProgress: agentTasks.filter(t => t.status === 'In Progress').length,
+      review: agentTasks.filter(t => t.status === 'Review').length,
+      assigned: agentTasks.filter(t => t.status === 'Assigned').length,
+    }
+  }
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'Working': return 'bg-accent-green'
@@ -118,6 +128,7 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onC
           const taskCount = getAgentTaskCount(agent.name)
           const assignedCount = getAssignedCount(agent.name)
           const outputStats = getAgentOutputStats(agent.name)
+          const taskBreakdown = getAgentTaskBreakdown(agent.name)
           const isSelected = selectedAgent === agent.name
 
           return (
@@ -135,7 +146,7 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onC
                 {/* Agent Avatar */}
                 <div className="relative">
                   <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center text-lg shrink-0"
+                    className={`w-9 h-9 rounded-full flex items-center justify-center text-lg shrink-0 ${agent.status === 'Working' ? 'agent-avatar-active' : ''}`}
                     style={{
                       background: `${agent.color}15`,
                       border: `2px solid ${agent.color}`,
@@ -170,13 +181,32 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onC
                   </div>
                 </div>
 
-                {/* Status + Config */}
+                {/* Status + Task Count Badges */}
                 <div className="flex flex-col items-end gap-1 shrink-0">
-                  <span className={`status-badge px-1.5 py-0.5 rounded border ${getStatusBadgeStyle(agent.status)}`}>
+                  <span className={`status-badge px-1.5 py-0.5 rounded border ${getStatusBadgeStyle(agent.status)} ${agent.status === 'Working' ? 'status-badge-pulse' : ''}`}>
                     {agent.status}
                   </span>
-                  {taskCount > 0 && (
-                    <span className="text-[10px] text-gray-500">{taskCount} tasks</span>
+                  {taskBreakdown.total > 0 ? (
+                    <div className="flex items-center gap-1">
+                      {taskBreakdown.inProgress > 0 && (
+                        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[9px] font-bold bg-accent-blue/20 text-accent-blue border border-accent-blue/30" title={`${taskBreakdown.inProgress} in progress`}>
+                          {taskBreakdown.inProgress}
+                        </span>
+                      )}
+                      {taskBreakdown.review > 0 && (
+                        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[9px] font-bold bg-accent-orange/20 text-accent-orange border border-accent-orange/30" title={`${taskBreakdown.review} in review`}>
+                          {taskBreakdown.review}
+                        </span>
+                      )}
+                      {taskBreakdown.assigned > 0 && (
+                        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[9px] font-bold bg-gray-500/20 text-gray-400 border border-gray-500/30" title={`${taskBreakdown.assigned} assigned`}>
+                          {taskBreakdown.assigned}
+                        </span>
+                      )}
+                      <span className="text-[9px] text-gray-600 ml-0.5">{taskBreakdown.total}</span>
+                    </div>
+                  ) : (
+                    <span className="text-[9px] text-gray-600 italic">idle</span>
                   )}
                 </div>
               </button>
@@ -198,6 +228,40 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onC
             </div>
           )
         })}
+      </div>
+
+      {/* Status Legend */}
+      <div className="px-4 py-2 border-t border-dark-500 space-y-1.5">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-[9px] text-gray-600 uppercase tracking-wider font-semibold">Agent:</span>
+          <div className="flex items-center gap-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-accent-green pulse-dot" />
+            <span className="text-[9px] text-gray-500">Working</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-accent-blue" />
+            <span className="text-[9px] text-gray-500">Active</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+            <span className="text-[9px] text-gray-500">Idle</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-[9px] text-gray-600 uppercase tracking-wider font-semibold">Tasks:</span>
+          <div className="flex items-center gap-1">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-accent-blue/30 border border-accent-blue/50" />
+            <span className="text-[9px] text-gray-500">In Progress</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-accent-orange/30 border border-accent-orange/50" />
+            <span className="text-[9px] text-gray-500">Review</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-500/30 border border-gray-500/50" />
+            <span className="text-[9px] text-gray-500">Assigned</span>
+          </div>
+        </div>
       </div>
 
       {/* Sidebar Footer */}

@@ -2,7 +2,7 @@
 // Uses the Impact-First Advertising Framework and Emotional Territories
 // Called by cron runner (aggressive auto-planning) or manually from dashboard
 
-import { getTasks, getAgents, addActivity, createTask } from '../../../../lib/airtable'
+import { getTasks, getAgents, addActivity, createTask, getGoals, updateGoal } from '../../../../lib/airtable'
 import { callAI } from '../../../../lib/ai'
 import { EMOTIONAL_TERRITORIES, FRAMEWORK_BRIEF } from '../../../../lib/framework'
 import { notifyCampaignPlanned } from '../../../../lib/slack'
@@ -29,6 +29,53 @@ const MIN_PIPELINE_TASKS = 20 // Skip planning if 20+ non-Done tasks exist
 const TASKS_PER_PLAN = 12     // Generate 10-12 tasks per planning cycle
 const MAX_TASKS_PER_PLAN = 15 // Hard cap per plan
 
+// ---- GOAL FREQUENCY ENGINE ----
+// Determines if a goal is "due" based on its frequency and last triggered date
+
+const FREQUENCY_MS = {
+  'Daily': 1 * 24 * 60 * 60 * 1000,
+  'Weekly': 7 * 24 * 60 * 60 * 1000,
+  'Biweekly': 14 * 24 * 60 * 60 * 1000,
+  'Monthly': 30 * 24 * 60 * 60 * 1000,
+  'Quarterly': 90 * 24 * 60 * 60 * 1000,
+}
+
+function isGoalDue(goal) {
+  if (goal.status !== 'Active') return false
+  if (!goal.lastTriggered) return true // Never triggered = always due
+
+  const lastTime = new Date(goal.lastTriggered).getTime()
+  const intervalMs = FREQUENCY_MS[goal.frequency] || FREQUENCY_MS['Weekly']
+  const now = Date.now()
+
+  return (now - lastTime) >= intervalMs
+}
+
+async function fetchDueGoals() {
+  try {
+    const goals = await getGoals({ noCache: true, status: 'Active' })
+    return goals.filter(isGoalDue)
+  } catch (err) {
+    console.warn('[PLANNER] Failed to fetch goals:', err.message)
+    return []
+  }
+}
+
+function buildGoalDirectives(dueGoals) {
+  if (dueGoals.length === 0) return ''
+
+  const lines = dueGoals.map(g => {
+    const parts = [`- **${g.name}**`]
+    if (g.agent) parts.push(`(Assigned to: ${g.agent})`)
+    if (g.contentType && g.contentType !== 'General') parts.push(`[${g.contentType}]`)
+    if (g.frequency) parts.push(`Frequency: ${g.frequency}`)
+    if (g.description) parts.push(`\n  Brief: ${g.description}`)
+    return parts.join(' ')
+  })
+
+  return `\n## Standing Goals (MUST generate tasks for these)\nThese are active standing objectives that are DUE for content generation.\nYou MUST create at least one task per goal below. These take priority.\n\n${lines.join('\n')}\n`
+}
+
 export async function POST(request) {
   const startTime = Date.now()
 
@@ -37,10 +84,11 @@ export async function POST(request) {
     const weeksAhead = body.weeksAhead || 2
     const campaignName = body.campaign || generateCampaignName()
 
-    // Fetch current state
-    const [tasks, agents] = await Promise.all([
+    // Fetch current state + active goals in parallel
+    const [tasks, agents, dueGoals] = await Promise.all([
       getTasks({ noCache: true }),
       getAgents({ noCache: true }),
+      fetchDueGoals(),
     ])
 
     // Find CMO agent
@@ -79,6 +127,12 @@ export async function POST(request) {
       .map(t => `- **${t.name}**: ${t.hooks.join(', ')} → "${t.insight}"`)
       .join('\n')
 
+    // Build goal directives for the prompt
+    const goalDirectives = buildGoalDirectives(dueGoals)
+    if (dueGoals.length > 0) {
+      console.log(`[PLANNER] ${dueGoals.length} goals due: ${dueGoals.map(g => g.name).join(', ')}`)
+    }
+
     // Ask CMO to generate a content plan
     const planPrompt = buildPlanPrompt({
       campaignName,
@@ -89,6 +143,7 @@ export async function POST(request) {
       territories: territoriesStr,
       platforms: PLATFORMS,
       tasksNeeded: Math.max(TASKS_PER_PLAN, MIN_PIPELINE_TASKS - activeTasks.length),
+      goalDirectives,
     })
 
     const planOutput = await callAI({
@@ -152,6 +207,22 @@ export async function POST(request) {
       }
     }
 
+    // Update goal tracking — mark goals as triggered and increment task count
+    if (dueGoals.length > 0 && created.length > 0) {
+      const now = new Date().toISOString().split('T')[0]
+      await Promise.all(
+        dueGoals.map(goal =>
+          updateGoal(goal.id, {
+            'Last Triggered': now,
+            'Tasks Generated': (goal.tasksGenerated || 0) + created.length,
+          }).catch(err => {
+            console.warn(`[PLANNER] Failed to update goal "${goal.name}":`, err.message)
+          })
+        )
+      )
+      console.log(`[PLANNER] Updated ${dueGoals.length} goals: ${dueGoals.map(g => g.name).join(', ')}`)
+    }
+
     // Log activity
     await addActivity({
       'Agent': 'CMO',
@@ -180,6 +251,7 @@ export async function POST(request) {
       campaign: campaignName,
       tasksCreated: created.length,
       tasks: created,
+      goalsTriggered: dueGoals.map(g => ({ name: g.name, frequency: g.frequency, agent: g.agent })),
       pipelineHealth: {
         before: activeTasks.length,
         after: activeTasks.length + created.length,
@@ -211,7 +283,7 @@ function getWeekNumber(date) {
   return Math.ceil((date.getDate() + startOfMonth.getDay()) / 7)
 }
 
-function buildPlanPrompt({ campaignName, weeksAhead, recentDone, existingActive, contentMix, territories, platforms, tasksNeeded }) {
+function buildPlanPrompt({ campaignName, weeksAhead, recentDone, existingActive, contentMix, territories, platforms, tasksNeeded, goalDirectives }) {
   const today = new Date()
   const dates = []
   for (let i = 1; i <= 7 * weeksAhead; i++) {
@@ -245,6 +317,7 @@ ${dates.join(', ')}
 ## Content Mix Target (per week)
 ${contentMix.map(c => `- ${c.type}: ${c.frequency}x/week → Platforms: ${c.platforms.join(', ')}`).join('\n')}
 
+${goalDirectives || ''}
 ## Recently Completed (DO NOT duplicate these)
 ${recentDone || '(none yet)'}
 

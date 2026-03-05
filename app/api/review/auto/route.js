@@ -22,7 +22,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json().catch(() => ({}))
-    const limit = body.limit || 5
+    const limit = body.limit || 10 // Increased from 5 → 10 for higher throughput
 
     // Fetch tasks in Review status
     const [tasks, agents] = await Promise.all([
@@ -44,17 +44,16 @@ export async function POST(request) {
       return NextResponse.json({ error: 'CHIEF agent not found' }, { status: 404 })
     }
 
-    // Process up to `limit` tasks
+    // Process up to `limit` tasks — PARALLEL review calls
     const toReview = reviewTasks.slice(0, limit)
 
-    for (const task of toReview) {
-      try {
+    // Fire all CHIEF review calls concurrently
+    const reviewResults = await Promise.allSettled(
+      toReview.map(async (task) => {
         console.log(`[REVIEWER] Reviewing: "${task.name}" by ${task.agent}`)
 
-        // Build review prompt
         const reviewPrompt = buildReviewPrompt(task)
 
-        // Call CHIEF to review
         const reviewOutput = await callAI({
           model: chief.model || 'claude-sonnet-4-6',
           temperature: chief.temperature || 0.4,
@@ -62,34 +61,41 @@ export async function POST(request) {
           userPrompt: reviewPrompt,
         })
 
-        // Parse the verdict
-        const verdict = parseVerdict(reviewOutput)
+        return { task, verdict: parseVerdict(reviewOutput) }
+      })
+    )
 
+    // Process verdicts (Airtable writes — sequential to avoid rate limits)
+    for (const result of reviewResults) {
+      if (result.status === 'rejected') {
+        const err = result.reason
+        results.errors.push({ task: 'unknown', error: err?.message || 'Review failed' })
+        continue
+      }
+
+      const { task, verdict } = result.value
+
+      try {
         if (verdict.approved) {
-          // APPROVE — move to Done
-          await updateTask(task.id, {
-            'Status': 'Done',
-          })
-
-          await addActivity({
-            'Agent': 'CHIEF',
-            'Action': 'approved',
-            'Task': task.name,
-            'Details': `Auto-approved (${verdict.score}/5). ${verdict.summary}`.substring(0, 5000),
-            'Type': 'Content Generated',
-          })
-
-          // Save learning to agent memory (what worked)
-          if (verdict.learning) {
-            await saveMemory({
+          // APPROVE — move to Done + learning + notifications (parallel)
+          await Promise.all([
+            updateTask(task.id, { 'Status': 'Done' }),
+            addActivity({
+              'Agent': 'CHIEF',
+              'Action': 'approved',
+              'Task': task.name,
+              'Details': `Auto-approved (${verdict.score}/5). ${verdict.summary}`.substring(0, 5000),
+              'Type': 'Content Generated',
+            }),
+            verdict.learning ? saveMemory({
               agent: task.agent,
               type: 'success_pattern',
               content: `Approved content "${task.name}": ${verdict.learning}`,
               source: 'auto-review',
               importance: verdict.score >= 4.0 ? 'High' : 'Medium',
               taskContext: task.contentType,
-            })
-          }
+            }) : Promise.resolve(),
+          ])
 
           results.approved.push({
             task: task.name,
@@ -98,7 +104,7 @@ export async function POST(request) {
             summary: verdict.summary,
           })
 
-          // Slack notification for approval
+          // Slack (fire-and-forget)
           notifyApproved({
             task: task.name,
             agent: task.agent,
@@ -106,74 +112,65 @@ export async function POST(request) {
             summary: verdict.summary,
           }).catch(() => {})
 
-          // AUTO-IMAGE: Generate visual companion for approved content
+          // AUTO-IMAGE: Fire-and-forget visual companion
           const visualTypes = new Set(['Social Post', 'Ad Copy', 'Blog Post', 'Video Script', 'Landing Page'])
           if (visualTypes.has(task.contentType) && process.env.OPENAI_API_KEY) {
-            try {
-              const territory = task.description?.match(/Territory:\s*(Celebration|Gratitude|Memory|Identity|Tribute)/i)?.[1]
-              const platform = Array.isArray(task.platform) ? task.platform[0] : task.platform
-              const preset = autoPreset(task.contentType, platform)
-              const imagePrompt = extractVisualPrompt(task.name, task.output, territory)
+            const territory = task.description?.match(/Territory:\s*(Celebration|Gratitude|Memory|Identity|Tribute)/i)?.[1]
+            const platform = Array.isArray(task.platform) ? task.platform[0] : task.platform
+            const preset = autoPreset(task.contentType, platform)
+            const imagePrompt = extractVisualPrompt(task.name, task.output, territory)
 
-              console.log(`[REVIEWER] 🎨 Auto-generating visual for "${task.name}" (${preset})`)
+            console.log(`[REVIEWER] 🎨 Fire-and-forget image for "${task.name}" (${preset})`)
 
-              const imageResult = await generateImage({
-                prompt: imagePrompt,
-                preset,
-                territory,
-                contentType: task.contentType,
-                taskName: task.name,
-              })
-
-              await addActivity({
+            generateImage({
+              prompt: imagePrompt,
+              preset,
+              territory,
+              contentType: task.contentType,
+              taskName: task.name,
+            }).then(imageResult => {
+              console.log(`[REVIEWER] 🎨 ✅ Image generated for "${task.name}"`)
+              return addActivity({
                 'Agent': 'PIXEL',
                 'Action': 'auto-generated image',
                 'Task': task.name,
                 'Details': `DALL-E 3 ${preset} visual for approved content. URL: ${imageResult.url?.substring(0, 200)}`,
                 'Type': 'Content Generated',
-              }).catch(() => {})
+              })
+            }).catch(imgErr => {
+              console.warn(`[REVIEWER] 🎨 Image failed for "${task.name}":`, imgErr.message)
+            })
 
-              results.approved[results.approved.length - 1].imageGenerated = true
-              results.approved[results.approved.length - 1].imageUrl = imageResult.url
-
-              console.log(`[REVIEWER] 🎨 ✅ Image generated for "${task.name}"`)
-            } catch (imgErr) {
-              console.warn(`[REVIEWER] 🎨 Image generation failed for "${task.name}":`, imgErr.message)
-              // Non-blocking — content still approved even if image fails
-            }
+            results.approved[results.approved.length - 1].imageQueued = true
           }
 
           console.log(`[REVIEWER] ✅ Approved: "${task.name}" (${verdict.score}/5)`)
 
         } else {
-          // REVISE — send back to Assigned with feedback
-          // Preserve the output chain for revision context
+          // REVISE — send back with feedback
           const revisionOutput = `[REVISION REQUESTED]\nFeedback: ${verdict.feedback}\n\n---PREVIOUS OUTPUT (v${getVersionNumber(task.output)})---\n${task.output}`
 
-          await updateTask(task.id, {
-            'Status': 'Assigned',
-            'Output': revisionOutput.substring(0, 100000),
-          })
-
-          await addActivity({
-            'Agent': 'CHIEF',
-            'Action': 'revision requested',
-            'Task': task.name,
-            'Details': `Sent back for revision (${verdict.score}/5). Feedback: ${verdict.feedback}`.substring(0, 5000),
-            'Type': 'Comment',
-          })
-
-          // Save feedback to agent memory (what to improve)
-          if (verdict.feedback) {
-            await saveMemory({
+          await Promise.all([
+            updateTask(task.id, {
+              'Status': 'Assigned',
+              'Output': revisionOutput.substring(0, 100000),
+            }),
+            addActivity({
+              'Agent': 'CHIEF',
+              'Action': 'revision requested',
+              'Task': task.name,
+              'Details': `Sent back for revision (${verdict.score}/5). Feedback: ${verdict.feedback}`.substring(0, 5000),
+              'Type': 'Comment',
+            }),
+            verdict.feedback ? saveMemory({
               agent: task.agent,
               type: 'feedback',
               content: `Review feedback on "${task.name}": ${verdict.feedback}`,
               source: 'auto-review',
               importance: 'High',
               taskContext: task.contentType,
-            })
-          }
+            }) : Promise.resolve(),
+          ])
 
           results.revised.push({
             task: task.name,
@@ -182,7 +179,6 @@ export async function POST(request) {
             feedback: verdict.feedback,
           })
 
-          // Slack notification for revision
           notifyRevised({
             task: task.name,
             agent: task.agent,
@@ -192,9 +188,8 @@ export async function POST(request) {
 
           console.log(`[REVIEWER] 🔄 Revision requested: "${task.name}" (${verdict.score}/5)`)
         }
-
       } catch (err) {
-        console.error(`[REVIEWER] ❌ Error reviewing "${task.name}":`, err.message)
+        console.error(`[REVIEWER] ❌ Error on "${task.name}":`, err.message)
         results.errors.push({ task: task.name, error: err.message })
       }
     }

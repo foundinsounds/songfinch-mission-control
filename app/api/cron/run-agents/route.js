@@ -6,9 +6,11 @@
 import { getTasks, getAgents, updateTask, addActivity, addContent } from '../../../../lib/airtable'
 import { callAI } from '../../../../lib/ai'
 import { generateImage, autoPreset, extractVisualPrompt } from '../../../../lib/dalle'
+import { generateVideo, generateVideoFromText, buildVideoPrompt } from '../../../../lib/ltx'
 import { FRAMEWORK_BRIEF } from '../../../../lib/framework'
 import { buildDesignContext, isFigmaConfigured } from '../../../../lib/figma'
 import { notifyCronCycle, notifyPipelineAlert } from '../../../../lib/slack'
+import { exportToDrive, isDriveConfigured } from '../../../../lib/drive'
 import { NextResponse } from 'next/server'
 
 // ---- AUTO-ASSIGNMENT ENGINE ----
@@ -26,6 +28,7 @@ const AGENT_ROUTING = {
   'report': 'CHIEF', 'Report': 'CHIEF',
   'design': 'PIXEL', 'Design': 'PIXEL',
   'image': 'PIXEL', 'Image': 'PIXEL',
+  'video': 'LENS', 'Video': 'LENS',
   'artist_spotlight': 'STORY', 'Artist Spotlight': 'STORY',
   'General': 'MUSE',
 }
@@ -157,12 +160,22 @@ async function autoAssignInboxTasks(tasks, agents) {
 
 // ---- MEMORY HELPERS ----
 
-async function getAgentMemories(agentName) {
+async function getAgentMemories(agentName, taskContext = {}) {
   try {
     const baseUrl = process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : 'http://localhost:3000'
-    const res = await fetch(`${baseUrl}/api/memory?agent=${encodeURIComponent(agentName)}`, {
+    const params = new URLSearchParams({
+      agent: agentName,
+      ranked: 'true',
+      limit: '10',
+    })
+    // Context-aware retrieval: pass task details for relevance scoring
+    if (taskContext.contentType) params.set('contentType', taskContext.contentType)
+    if (taskContext.query) params.set('query', taskContext.query)
+    if (taskContext.territory) params.set('territory', taskContext.territory)
+
+    const res = await fetch(`${baseUrl}/api/memory?${params.toString()}`, {
       cache: 'no-store',
     })
     if (!res.ok) return []
@@ -332,9 +345,10 @@ export async function GET(request) {
       }).catch(() => {})
     }
 
-    // 6. Process assigned tasks (5 per run = 480/day at 15-min cron)
+    // 6. Process assigned tasks — PARALLEL execution for higher throughput
+    // Default 8 tasks/cycle × 4 cycles/hour = 32/hour = 768/day theoretical max
     const url = new URL(request.url)
-    const limit = parseInt(url.searchParams.get('limit') || '5', 10)
+    const limit = parseInt(url.searchParams.get('limit') || '8', 10)
     const allAssigned = tasks.filter(t => t.status === 'Assigned' && t.agent)
     const assignedTasks = allAssigned.slice(0, limit)
 
@@ -351,183 +365,81 @@ export async function GET(request) {
       })
     }
 
-    // 7. Process each assigned task
+    // 7. PRE-FETCH: Batch-load agent memories with task-aware relevance scoring
+    // Each agent gets memories ranked by relevance to their current task context
+    const memoryCache = {}
+    await Promise.all(
+      assignedTasks.map(async (task) => {
+        if (!task.agent) return
+        // Build context from the task for relevance-scored retrieval
+        const territory = task.tags?.length > 0 ? task.tags[0] : undefined
+        const queryHint = `${task.name} ${task.contentType || ''} ${task.campaign || ''}`.trim()
+        const cacheKey = `${task.agent}::${task.id}`
+        memoryCache[cacheKey] = await getAgentMemories(task.agent, {
+          contentType: task.contentType,
+          query: queryHint,
+          territory,
+        })
+      })
+    )
+
+    // 8. Mark all tasks "In Progress" first (batch status update)
+    const validTasks = []
     for (const task of assignedTasks) {
-      try {
-        const agent = agents.find(a => a.name === task.agent)
-        if (!agent) {
-          results.skipped.push({ task: task.name, reason: `Agent "${task.agent}" not found` })
-          continue
-        }
+      const agent = agents.find(a => a.name === task.agent)
+      if (!agent) {
+        results.skipped.push({ task: task.name, reason: `Agent "${task.agent}" not found` })
+        continue
+      }
+      if (agent.status === 'Idle') {
+        results.skipped.push({ task: task.name, reason: `${agent.name} is Idle` })
+        continue
+      }
+      validTasks.push({ task, agent })
+    }
 
-        if (agent.status === 'Idle') {
-          results.skipped.push({ task: task.name, reason: `${agent.name} is Idle` })
-          continue
-        }
-
-        console.log(`[RUNNER] Processing: "${task.name}" → ${agent.name} (${agent.model})`)
-
-        await addActivity({
-          'Agent': agent.name,
-          'Action': 'started',
-          'Task': task.name,
-          'Details': `Processing ${task.contentType || 'content'} with ${agent.model}`,
-          'Type': 'Task Created',
-        })
-
-        await updateTask(task.id, { 'Status': 'In Progress' })
-
-        // Check revision context
-        const isRevision = task.output && task.output.startsWith('[REVISION REQUESTED]')
-        let feedbackContext = null
-        let previousOutput = null
-
-        if (isRevision) {
-          const feedbackMatch = task.output.match(/^(?:\[REVISION REQUESTED\])\nFeedback: ([\s\S]*?)\n\n---PREVIOUS OUTPUT/)
-          feedbackContext = feedbackMatch ? feedbackMatch[1].trim() : null
-          const prevMatch = task.output.match(/---PREVIOUS OUTPUT \(v\d+\)---\n([\s\S]*?)(?=\n---PREVIOUS OUTPUT|$)/)
-          previousOutput = prevMatch ? prevMatch[1].trim() : null
-        }
-
-        // Fetch agent memories
-        const memories = await getAgentMemories(agent.name)
-        const memoryContext = memories.length > 0
-          ? '\n\n## Agent Memory (Learnings from past work)\n' + memories.slice(0, 10).map(m =>
-              `- [${m.type}] ${m.content}`
-            ).join('\n')
-          : ''
-
-        // Figma context for PIXEL
-        let figmaContext = ''
-        if (agent.name === 'PIXEL' && isFigmaConfigured()) {
-          const figmaUrlMatch = (task.description || '').match(/(https?:\/\/[^\s]*figma\.com\/[^\s]+)/)
-          if (figmaUrlMatch) {
-            try {
-              const ctx = await buildDesignContext(figmaUrlMatch[1])
-              if (ctx) figmaContext = '\n\n' + ctx
-            } catch (err) {
-              console.warn(`[RUNNER] Figma context failed: ${err.message}`)
-            }
-          }
-        }
-
-        // Build prompt with FRAMEWORK injection
-        const userPrompt = (isRevision
-          ? buildRevisionPrompt(task, feedbackContext, previousOutput)
-          : buildTaskPrompt(task)) + memoryContext + figmaContext
-
-        let output
-
-        // IMAGE TASKS: Route to DALL-E 3 instead of text AI
-        if (task.contentType === 'Image' && process.env.OPENAI_API_KEY) {
-          const territory = task.description?.match(/Territory:\s*(Celebration|Gratitude|Memory|Identity|Tribute)/i)?.[1]
-          const platform = Array.isArray(task.platform) ? task.platform[0] : task.platform
-          const preset = autoPreset(task.contentType, platform)
-          const imagePrompt = extractVisualPrompt(task.name, task.description, territory)
-
-          console.log(`[RUNNER] 🎨 Image task: "${task.name}" → DALL-E 3 (${preset})`)
-
-          const imageResult = await generateImage({
-            prompt: imagePrompt,
-            preset,
-            territory,
-            contentType: 'Image',
-            taskName: task.name,
-          })
-
-          output = `IMAGE GENERATED\n\nURL: ${imageResult.url}\n\nRevised Prompt: ${imageResult.revisedPrompt || 'N/A'}\n\nPreset: ${preset}\nSize: ${imageResult.size}\nTerritory: ${territory || 'N/A'}\nOriginal Prompt: ${imagePrompt}`
-        } else {
-          // TEXT TASKS: Standard AI generation
-          output = await callAI({
-            model: agent.model,
-            temperature: agent.temperature,
-            systemPrompt: agent.systemPrompt || `You are ${agent.name}, the ${agent.role} for Songfinch.`,
-            userPrompt,
-          })
-        }
-
-        // Preserve revision history
-        let finalOutput = output.substring(0, 80000)
-        if (isRevision && task.output) {
-          const historyStart = task.output.indexOf('---PREVIOUS OUTPUT')
-          if (historyStart >= 0) {
-            const history = task.output.substring(historyStart)
-            finalOutput = finalOutput + '\n\n' + history
-          }
-        }
-
-        // Save output → Review
-        await updateTask(task.id, {
-          'Status': 'Review',
-          'Output': finalOutput.substring(0, 100000),
-        })
-
-        // Save to Content Library
-        try {
-          await addContent({
-            'Title': task.name,
-            'Content Body': output,
-            'Content Type': sanitizeContentType(task.contentType),
-            'Platform': Array.isArray(task.platform) ? task.platform.join(', ') : (task.platform || ''),
+    // Mark all valid tasks as In Progress (parallel)
+    await Promise.all(
+      validTasks.map(({ task, agent }) =>
+        Promise.all([
+          updateTask(task.id, { 'Status': 'In Progress' }),
+          addActivity({
             'Agent': agent.name,
-            'Campaign': task.campaign || '',
-            'Status': 'Draft',
-          })
-        } catch (contentErr) {
-          console.warn(`[RUNNER] Content Library save failed for "${task.name}": ${contentErr.message}`)
-        }
+            'Action': 'started',
+            'Task': task.name,
+            'Details': `Processing ${task.contentType || 'content'} with ${agent.model}`,
+            'Type': 'Task Created',
+          }),
+        ]).catch(() => {})
+      )
+    )
 
-        // Extract metadata from output
-        const whyMatch = output.match(/(?:^|\n)\s*WHY:\s*(.+?)(?=\n\s*(?:IMPACT|LINKS)|$)/is)
-        const impactMatch = output.match(/(?:^|\n)\s*IMPACT:\s*(.+?)(?=\n\s*LINKS|$)/is)
+    // 9. PARALLEL PROCESSING: Execute all tasks concurrently
+    // Each task calls AI independently — no contention between different models/providers
+    const taskResults = await Promise.allSettled(
+      validTasks.map(({ task, agent }) => processTask(task, agent, memoryCache))
+    )
 
-        let completionDetails = isRevision
-          ? `Revised ${task.contentType || 'content'} based on feedback (${output.length} chars). Ready for review.`
-          : `Generated ${task.contentType || 'content'} (${output.length} chars). Ready for review.`
-        if (whyMatch) completionDetails += `\nWHY: ${whyMatch[1].trim()}`
-        if (impactMatch) completionDetails += `\nIMPACT: ${impactMatch[1].trim()}`
+    // Collect results
+    for (let i = 0; i < taskResults.length; i++) {
+      const { task } = validTasks[i]
+      const result = taskResults[i]
 
-        await addActivity({
-          'Agent': agent.name,
-          'Action': 'completed',
-          'Task': task.name,
-          'Details': completionDetails.substring(0, 5000),
-          'Type': 'Content Generated',
-        })
-
-        // Save revision feedback as learning
-        if (isRevision && feedbackContext) {
-          await saveMemory({
-            agent: agent.name,
-            type: 'feedback',
-            content: `Received feedback on "${task.name}": ${feedbackContext.substring(0, 500)}`,
-            source: 'revision',
-            importance: 'High',
-            taskContext: task.contentType || 'content',
-          })
-        }
-
-        results.processed.push({
-          task: task.name,
-          agent: agent.name,
-          model: agent.model,
-          outputLength: output.length,
-        })
-
-        console.log(`[RUNNER] ✅ Completed: "${task.name}" (${output.length} chars)`)
-
-      } catch (err) {
-        console.error(`[RUNNER] ❌ Error on "${task.name}":`, err.message)
-        results.errors.push({ task: task.name, error: err.message })
+      if (result.status === 'fulfilled') {
+        results.processed.push(result.value)
+        console.log(`[RUNNER] ✅ Completed: "${task.name}" (${result.value.outputLength} chars)`)
+      } else {
+        const err = result.reason
+        console.error(`[RUNNER] ❌ Error on "${task.name}":`, err?.message || err)
+        results.errors.push({ task: task.name, error: err?.message || 'Unknown error' })
 
         // CRITICAL: Revert status so the task doesn't stay stuck in "In Progress"
-        // Increment retry count to prevent infinite retries
         const retries = (task.retries || 0) + 1
-        const revertStatus = retries >= 3 ? 'Review' : 'Assigned' // After 3 failures → send to Review for manual inspection
+        const revertStatus = retries >= 3 ? 'Review' : 'Assigned'
         await updateTask(task.id, {
           'Status': revertStatus,
           'Output': retries >= 3
-            ? `[GENERATION FAILED after ${retries} attempts]\nLast error: ${err.message}\n\nThis task needs manual attention.`
+            ? `[GENERATION FAILED after ${retries} attempts]\nLast error: ${err?.message}\n\nThis task needs manual attention.`
             : (task.output || ''),
         }).catch(() => {})
 
@@ -537,7 +449,7 @@ export async function GET(request) {
           'Agent': task.agent || 'System',
           'Action': 'error',
           'Task': task.name,
-          'Details': `Failed (attempt ${retries}): ${err.message}. Reverted to ${revertStatus}.`,
+          'Details': `Failed (attempt ${retries}): ${err?.message}. Reverted to ${revertStatus}.`,
           'Type': 'Comment',
         }).catch(() => {})
       }
@@ -588,6 +500,209 @@ export async function GET(request) {
   } catch (err) {
     console.error('[RUNNER] Fatal error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}
+
+/**
+ * Process a single task — runs AI generation, saves output, logs activity.
+ * Designed to be called concurrently via Promise.allSettled.
+ */
+async function processTask(task, agent, memoryCache) {
+  console.log(`[RUNNER] Processing: "${task.name}" → ${agent.name} (${agent.model})`)
+
+  // Check revision context
+  const isRevision = task.output && task.output.startsWith('[REVISION REQUESTED]')
+  let feedbackContext = null
+  let previousOutput = null
+
+  if (isRevision) {
+    const feedbackMatch = task.output.match(/^(?:\[REVISION REQUESTED\])\nFeedback: ([\s\S]*?)\n\n---PREVIOUS OUTPUT/)
+    feedbackContext = feedbackMatch ? feedbackMatch[1].trim() : null
+    const prevMatch = task.output.match(/---PREVIOUS OUTPUT \(v\d+\)---\n([\s\S]*?)(?=\n---PREVIOUS OUTPUT|$)/)
+    previousOutput = prevMatch ? prevMatch[1].trim() : null
+  }
+
+  // Use pre-fetched memories from task-specific cache (relevance-scored)
+  const cacheKey = `${agent.name}::${task.id}`
+  const memories = memoryCache[cacheKey] || memoryCache[agent.name] || []
+  const memoryContext = memories.length > 0
+    ? '\n\n## Agent Memory (Relevance-Scored Learnings)\n' + memories.slice(0, 10).map(m =>
+        `- [${m.type}${m.relevanceScore ? ` ★${m.relevanceScore}` : ''}] ${m.content}`
+      ).join('\n')
+    : ''
+
+  // Figma context for PIXEL
+  let figmaContext = ''
+  if (agent.name === 'PIXEL' && isFigmaConfigured()) {
+    const figmaUrlMatch = (task.description || '').match(/(https?:\/\/[^\s]*figma\.com\/[^\s]+)/)
+    if (figmaUrlMatch) {
+      try {
+        const ctx = await buildDesignContext(figmaUrlMatch[1])
+        if (ctx) figmaContext = '\n\n' + ctx
+      } catch (err) {
+        console.warn(`[RUNNER] Figma context failed: ${err.message}`)
+      }
+    }
+  }
+
+  // Build prompt with FRAMEWORK injection
+  const userPrompt = (isRevision
+    ? buildRevisionPrompt(task, feedbackContext, previousOutput)
+    : buildTaskPrompt(task)) + memoryContext + figmaContext
+
+  let output
+
+  // IMAGE TASKS: Route to DALL-E 3 instead of text AI
+  if (task.contentType === 'Image' && process.env.OPENAI_API_KEY) {
+    const territory = task.description?.match(/Territory:\s*(Celebration|Gratitude|Memory|Identity|Tribute)/i)?.[1]
+    const platform = Array.isArray(task.platform) ? task.platform[0] : task.platform
+    const preset = autoPreset(task.contentType, platform)
+    const imagePrompt = extractVisualPrompt(task.name, task.description, territory)
+
+    console.log(`[RUNNER] 🎨 Image task: "${task.name}" → DALL-E 3 (${preset})`)
+
+    const imageResult = await generateImage({
+      prompt: imagePrompt,
+      preset,
+      territory,
+      contentType: 'Image',
+      taskName: task.name,
+    })
+
+    output = `IMAGE GENERATED\n\nURL: ${imageResult.url}\n\nRevised Prompt: ${imageResult.revisedPrompt || 'N/A'}\n\nPreset: ${preset}\nSize: ${imageResult.size}\nTerritory: ${territory || 'N/A'}\nOriginal Prompt: ${imagePrompt}`
+  }
+  // VIDEO TASKS: Route to LTX-2 for video generation
+  else if (task.contentType === 'Video Script' && process.env.HF_TOKEN) {
+    // Check if the task already has text output (a completed video script from LENS agent)
+    const scriptText = task.output && !task.output.startsWith('[REVISION REQUESTED]')
+      ? task.output
+      : task.description || task.name
+
+    const videoPrompt = buildVideoPrompt(scriptText)
+    const numFrames = 121 // ~5 seconds at 25fps
+    const fps = 25
+
+    console.log(`[RUNNER] 🎬 Video task: "${task.name}" → LTX-2 (${numFrames} frames, ${fps}fps)`)
+
+    try {
+      const videoResult = await generateVideoFromText({
+        prompt: videoPrompt,
+        numFrames,
+        fps,
+      })
+
+      output = `VIDEO GENERATED\n\nURL: ${videoResult.url}\nPrompt: ${videoPrompt}\nFrames: ${numFrames}\nFPS: ${fps}`
+    } catch (videoErr) {
+      console.warn(`[RUNNER] 🎬 LTX-2 failed for "${task.name}": ${videoErr.message}. Falling back to text AI.`)
+
+      // Fall back to standard text AI generation (produces a script instead)
+      output = await callAI({
+        model: agent.model,
+        temperature: agent.temperature,
+        systemPrompt: agent.systemPrompt || `You are ${agent.name}, the ${agent.role} for Songfinch.`,
+        userPrompt,
+      })
+    }
+  } else {
+    // TEXT TASKS: Standard AI generation
+    output = await callAI({
+      model: agent.model,
+      temperature: agent.temperature,
+      systemPrompt: agent.systemPrompt || `You are ${agent.name}, the ${agent.role} for Songfinch.`,
+      userPrompt,
+    })
+  }
+
+  // Preserve revision history
+  let finalOutput = output.substring(0, 80000)
+  if (isRevision && task.output) {
+    const historyStart = task.output.indexOf('---PREVIOUS OUTPUT')
+    if (historyStart >= 0) {
+      const history = task.output.substring(historyStart)
+      finalOutput = finalOutput + '\n\n' + history
+    }
+  }
+
+  // Save output → Review + Content Library + Google Drive (parallel writes)
+  const taskUpdateFields = {
+    'Status': 'Review',
+    'Output': finalOutput.substring(0, 100000),
+  }
+
+  // Google Drive export (non-blocking — runs alongside Airtable saves)
+  const driveExportPromise = isDriveConfigured()
+    ? exportToDrive({
+        name: task.name,
+        output: output,
+        contentType: task.contentType,
+        campaign: task.campaign,
+        agent: agent.name,
+      }).then(driveResult => {
+        if (driveResult?.url) {
+          console.log(`[RUNNER] 📁 Exported to Drive: "${task.name}" → ${driveResult.url}`)
+          // Update task with Drive link (fire-and-forget)
+          updateTask(task.id, { 'Google Drive Link': driveResult.url }).catch(() => {})
+          return driveResult.url
+        }
+        return null
+      }).catch(driveErr => {
+        console.warn(`[RUNNER] 📁 Drive export failed for "${task.name}": ${driveErr.message}`)
+        return null
+      })
+    : Promise.resolve(null)
+
+  await Promise.all([
+    updateTask(task.id, taskUpdateFields),
+    addContent({
+      'Title': task.name,
+      'Content Body': output,
+      'Content Type': sanitizeContentType(task.contentType),
+      'Platform': Array.isArray(task.platform) ? task.platform.join(', ') : (task.platform || ''),
+      'Agent': agent.name,
+      'Campaign': task.campaign || '',
+      'Status': 'Draft',
+    }).catch(contentErr => {
+      console.warn(`[RUNNER] Content Library save failed for "${task.name}": ${contentErr.message}`)
+    }),
+    driveExportPromise,
+  ])
+
+  // Extract metadata from output
+  const whyMatch = output.match(/(?:^|\n)\s*WHY:\s*(.+?)(?=\n\s*(?:IMPACT|LINKS)|$)/is)
+  const impactMatch = output.match(/(?:^|\n)\s*IMPACT:\s*(.+?)(?=\n\s*LINKS|$)/is)
+
+  let completionDetails = isRevision
+    ? `Revised ${task.contentType || 'content'} based on feedback (${output.length} chars). Ready for review.`
+    : `Generated ${task.contentType || 'content'} (${output.length} chars). Ready for review.`
+  if (whyMatch) completionDetails += `\nWHY: ${whyMatch[1].trim()}`
+  if (impactMatch) completionDetails += `\nIMPACT: ${impactMatch[1].trim()}`
+
+  // Activity log + revision learning (parallel)
+  await Promise.all([
+    addActivity({
+      'Agent': agent.name,
+      'Action': 'completed',
+      'Task': task.name,
+      'Details': completionDetails.substring(0, 5000),
+      'Type': 'Content Generated',
+    }),
+    (isRevision && feedbackContext)
+      ? saveMemory({
+          agent: agent.name,
+          type: 'feedback',
+          content: `Received feedback on "${task.name}": ${feedbackContext.substring(0, 500)}`,
+          source: 'revision',
+          importance: 'High',
+          taskContext: task.contentType || 'content',
+        })
+      : Promise.resolve(),
+  ])
+
+  return {
+    task: task.name,
+    agent: agent.name,
+    model: agent.model,
+    outputLength: output.length,
   }
 }
 
@@ -706,7 +821,8 @@ function buildRevisionPrompt(task, feedback, previousOutput) {
 
 const VALID_CONTENT_TYPES = new Set([
   'Ad Copy', 'Social Post', 'Video Script', 'Blog Post',
-  'Landing Page', 'Artist Spotlight', 'Strategy', 'Image', 'General',
+  'Landing Page', 'Artist Spotlight', 'Strategy', 'Image', 'Video',
+  'SEO Content', 'General',
 ])
 
 function sanitizeContentType(type) {

@@ -21,6 +21,12 @@ export default function SettingsPanel({ theme, onToggleTheme, onClose }) {
       runInterval: 60,
       pollInterval: 15,
       showNotifications: true,
+      soundEnabled: true,
+      soundVolume: 50,
+      soundOnTaskComplete: true,
+      soundOnAgentFinish: true,
+      soundOnError: true,
+      soundOnMention: false,
       compactMode: false,
       defaultModel: DEFAULT_MODEL,
       liveFeedMaxItems: 50,
@@ -162,6 +168,56 @@ export default function SettingsPanel({ theme, onToggleTheme, onClose }) {
                     onChange={(v) => updateSetting('showNotifications', v)}
                   />
                 </SettingRow>
+              </SettingGroup>
+
+              {/* Sound Preferences */}
+              <SettingGroup title="Sound & Alerts">
+                <SettingRow
+                  label="Sound effects"
+                  description="Play audio cues for events"
+                >
+                  <Toggle
+                    checked={settings.soundEnabled}
+                    onChange={(v) => updateSetting('soundEnabled', v)}
+                  />
+                </SettingRow>
+                {settings.soundEnabled && (
+                  <>
+                    <SettingRow
+                      label="Volume"
+                      description="Audio alert volume level"
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-500 shrink-0">
+                          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                        </svg>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={10}
+                          value={settings.soundVolume}
+                          onChange={(e) => updateSetting('soundVolume', Number(e.target.value))}
+                          className="w-20 h-1 accent-accent-orange cursor-pointer"
+                        />
+                        <span className="text-[10px] text-gray-500 font-mono tabular-nums w-7 text-right">{settings.soundVolume}%</span>
+                      </div>
+                    </SettingRow>
+                    <div className="text-[10px] text-gray-600 font-medium uppercase tracking-wider mb-1.5 mt-2">Play sound when:</div>
+                    <SettingRow label="Task completed" description="A task moves to Done">
+                      <Toggle checked={settings.soundOnTaskComplete} onChange={(v) => updateSetting('soundOnTaskComplete', v)} />
+                    </SettingRow>
+                    <SettingRow label="Agent finished" description="An agent completes its run">
+                      <Toggle checked={settings.soundOnAgentFinish} onChange={(v) => updateSetting('soundOnAgentFinish', v)} />
+                    </SettingRow>
+                    <SettingRow label="Error alert" description="An error or failure occurs">
+                      <Toggle checked={settings.soundOnError} onChange={(v) => updateSetting('soundOnError', v)} />
+                    </SettingRow>
+                    <SettingRow label="Mentions" description="When @mentioned in a comment">
+                      <Toggle checked={settings.soundOnMention} onChange={(v) => updateSetting('soundOnMention', v)} />
+                    </SettingRow>
+                  </>
+                )}
               </SettingGroup>
             </>
           )}
