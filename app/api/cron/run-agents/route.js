@@ -297,7 +297,42 @@ export async function GET(request) {
       console.log(`[RUNNER] Auto-assigned ${autoAssigned.length} tasks`)
     }
 
-    // 4. Process assigned tasks (5 per run = 480/day at 15-min cron)
+    // 4. STALL RECOVERY: Unstick tasks stranded in "In Progress"
+    // The cron runner is the ONLY thing that sets "In Progress" and it processes
+    // synchronously. So ANY task still "In Progress" at the start of a new run
+    // is a leftover from a failed previous run — reset it to "Assigned" for retry.
+    const stalledTasks = tasks.filter(t => t.status === 'In Progress')
+
+    for (const stalled of stalledTasks) {
+      try {
+        await updateTask(stalled.id, { 'Status': 'Assigned' })
+        stalled.status = 'Assigned' // Update in-memory so it gets picked up below
+        console.log(`[RUNNER] 🔄 Unstalled: "${stalled.name}" was stuck In Progress → reset to Assigned`)
+        await addActivity({
+          'Agent': 'Council',
+          'Action': 'stall-recovery',
+          'Task': stalled.name,
+          'Details': `Task was stuck in "In Progress" from a previous failed run. Reset to Assigned for retry.`,
+          'Type': 'Comment',
+        }).catch(() => {})
+      } catch (err) {
+        console.warn(`[RUNNER] Stall recovery failed for "${stalled.name}":`, err.message)
+      }
+    }
+
+    if (stalledTasks.length > 0) {
+      console.log(`[RUNNER] 🔄 Recovered ${stalledTasks.length} stalled tasks`)
+      results.recovered = stalledTasks.map(t => t.name)
+
+      // Alert via Slack
+      notifyPipelineAlert({
+        type: 'stall_recovery',
+        message: `Recovered ${stalledTasks.length} stalled tasks`,
+        details: stalledTasks.map(t => `• "${t.name}" (${t.agent})`).join('\n'),
+      }).catch(() => {})
+    }
+
+    // 6. Process assigned tasks (5 per run = 480/day at 15-min cron)
     const url = new URL(request.url)
     const limit = parseInt(url.searchParams.get('limit') || '5', 10)
     const allAssigned = tasks.filter(t => t.status === 'Assigned' && t.agent)
@@ -316,7 +351,7 @@ export async function GET(request) {
       })
     }
 
-    // 5. Process each assigned task
+    // 7. Process each assigned task
     for (const task of assignedTasks) {
       try {
         const agent = agents.find(a => a.name === task.agent)
@@ -485,17 +520,30 @@ export async function GET(request) {
         console.error(`[RUNNER] ❌ Error on "${task.name}":`, err.message)
         results.errors.push({ task: task.name, error: err.message })
 
+        // CRITICAL: Revert status so the task doesn't stay stuck in "In Progress"
+        // Increment retry count to prevent infinite retries
+        const retries = (task.retries || 0) + 1
+        const revertStatus = retries >= 3 ? 'Review' : 'Assigned' // After 3 failures → send to Review for manual inspection
+        await updateTask(task.id, {
+          'Status': revertStatus,
+          'Output': retries >= 3
+            ? `[GENERATION FAILED after ${retries} attempts]\nLast error: ${err.message}\n\nThis task needs manual attention.`
+            : (task.output || ''),
+        }).catch(() => {})
+
+        console.log(`[RUNNER] ↩️ Reverted "${task.name}" to ${revertStatus} (attempt ${retries})`)
+
         await addActivity({
           'Agent': task.agent || 'System',
           'Action': 'error',
           'Task': task.name,
-          'Details': `Failed: ${err.message}`,
+          'Details': `Failed (attempt ${retries}): ${err.message}. Reverted to ${revertStatus}.`,
           'Type': 'Comment',
         }).catch(() => {})
       }
     }
 
-    // 6. AUTO-REVIEW: After processing, review anything in Review status
+    // 8. AUTO-REVIEW: After processing, review anything in Review status
     const reviewData = await triggerAutoReview()
     results.reviewResults = reviewData
 
