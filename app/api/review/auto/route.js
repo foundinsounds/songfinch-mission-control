@@ -6,6 +6,7 @@ import { getTasks, getAgents, updateTask, addActivity } from '../../../../lib/ai
 import { callAI } from '../../../../lib/ai'
 import { QUALITY_RUBRIC } from '../../../../lib/framework'
 import { generateImage, autoPreset, extractVisualPrompt } from '../../../../lib/dalle'
+import { exportToDrive, isDriveConfigured } from '../../../../lib/drive'
 import { notifyApproved, notifyRevised, notifyReviewCycle } from '../../../../lib/slack'
 import { NextResponse } from 'next/server'
 
@@ -162,6 +163,27 @@ export async function POST(request) {
             results.approved[results.approved.length - 1].imageQueued = true
           }
 
+          // AUTO-EXPORT: Fire-and-forget Drive export for approved content
+          if (isDriveConfigured()) {
+            console.log(`[REVIEWER] 📁 Fire-and-forget Drive export for "${task.name}"`)
+            exportToDrive({
+              name: task.name,
+              output: task.output,
+              contentType: task.contentType,
+              campaign: task.campaign,
+              agent: task.agent,
+            }).then(driveResult => {
+              if (driveResult?.url) {
+                console.log(`[REVIEWER] 📁 ✅ Exported to Drive: "${task.name}" → ${driveResult.url}`)
+                // Update task with Drive link (best-effort)
+                updateTask(task.id, { 'Drive Link': driveResult.url }).catch(() => {})
+              }
+            }).catch(driveErr => {
+              console.warn(`[REVIEWER] 📁 Drive export failed for "${task.name}":`, driveErr.message)
+            })
+            results.approved[results.approved.length - 1].driveQueued = true
+          }
+
           console.log(`[REVIEWER] ✅ Approved: "${task.name}" (${verdict.score}/5)`)
 
         } else {
@@ -228,6 +250,16 @@ export async function POST(request) {
       revised: results.revised.length,
       errors: results.errors.length,
     }).catch(() => {})
+
+    // AUTO-REFILL: If review queue is nearly empty, trigger CMO planning
+    // This keeps the pipeline continuously fed without waiting for cron
+    const remainingReview = reviewTasks.length - toReview.length
+    const freshTasks = tasks.filter(t => ['Queued', 'Assigned', 'In Progress'].includes(t.status))
+    if (remainingReview === 0 && freshTasks.length < 10) {
+      console.log(`[REVIEWER] 🔄 Review queue empty + only ${freshTasks.length} in pipeline — triggering auto-refill`)
+      triggerAutoRefill().catch(() => {})
+      results.autoRefillTriggered = true
+    }
 
     return NextResponse.json({
       message: `Reviewed ${toReview.length} tasks`,
@@ -322,6 +354,28 @@ function getVersionNumber(output) {
   if (!output) return 1
   const matches = output.match(/---PREVIOUS OUTPUT \(v(\d+)\)---/g)
   return matches ? matches.length + 1 : 1
+}
+
+// Auto-refill helper — triggers CMO planning when pipeline runs low
+async function triggerAutoRefill() {
+  try {
+    const baseUrl = process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : 'http://localhost:3000'
+    const res = await fetch(`${baseUrl}/api/cron/run-agents`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-cron-secret': process.env.CRON_SECRET || '',
+      },
+      body: JSON.stringify({ planOnly: true }),
+    })
+    if (res.ok) {
+      console.log(`[REVIEWER] 🔄 ✅ Auto-refill planning triggered`)
+    }
+  } catch {
+    // Non-critical
+  }
 }
 
 // Memory helper (same as cron runner)

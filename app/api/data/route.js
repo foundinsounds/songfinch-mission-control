@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 async function safeFetch(fn, label) {
   try {
-    return await fn()
+    return await fn({ noCache: true })
   } catch (err) {
     console.warn(`[data] ${label} failed: ${err.message}`)
     return []
