@@ -163,9 +163,47 @@ export async function POST(request) {
       })
     }
 
+    // DEDUPLICATION: Filter out tasks too similar to existing ones
+    const existingNames = tasks.map(t => t.name?.toLowerCase().trim()).filter(Boolean)
+    const deduped = plannedTasks.filter(task => {
+      const newName = task.name?.toLowerCase().trim()
+      if (!newName) return false
+
+      for (const existing of existingNames) {
+        // Exact match
+        if (newName === existing) {
+          console.log(`[PLANNER] Dedup: exact match "${task.name}" — skipping`)
+          return false
+        }
+        // High similarity (>80% character overlap via normalized Levenshtein)
+        if (stringSimilarity(newName, existing) > 0.8) {
+          console.log(`[PLANNER] Dedup: fuzzy match "${task.name}" ≈ "${existing}" — skipping`)
+          return false
+        }
+        // Same content type + platform + scheduled date = likely duplicate concept
+        if (task.contentType && task.platform && task.scheduledDate) {
+          const existingTask = tasks.find(t => t.name?.toLowerCase().trim() === existing)
+          if (existingTask &&
+              existingTask.contentType === task.contentType &&
+              existingTask.platform === task.platform &&
+              existingTask.scheduledDate === task.scheduledDate &&
+              stringSimilarity(newName, existing) > 0.5) {
+            console.log(`[PLANNER] Dedup: same type/platform/date "${task.name}" — skipping`)
+            return false
+          }
+        }
+      }
+      return true
+    })
+
+    const dupCount = plannedTasks.length - deduped.length
+    if (dupCount > 0) {
+      console.log(`[PLANNER] Deduplication removed ${dupCount} duplicate tasks`)
+    }
+
     // Create tasks in Airtable
     const created = []
-    for (const task of plannedTasks) {
+    for (const task of deduped) {
       try {
         // Build rich description with metadata and framework context
         const metaParts = []
@@ -412,4 +450,33 @@ function parsePlan(output) {
     console.error('[PLANNER] Raw output (first 1000):', output.substring(0, 1000))
     return []
   }
+}
+
+// Normalized Levenshtein similarity — returns 0.0 to 1.0 (1 = identical)
+function stringSimilarity(a, b) {
+  if (a === b) return 1.0
+  if (!a || !b) return 0.0
+
+  const lenA = a.length
+  const lenB = b.length
+  if (lenA === 0 || lenB === 0) return 0.0
+
+  // Quick length-based rejection — strings differing by >60% length can't be >80% similar
+  if (Math.abs(lenA - lenB) / Math.max(lenA, lenB) > 0.6) return 0.0
+
+  // Levenshtein distance via two-row DP
+  let prev = Array.from({ length: lenB + 1 }, (_, i) => i)
+  let curr = new Array(lenB + 1)
+
+  for (let i = 1; i <= lenA; i++) {
+    curr[0] = i
+    for (let j = 1; j <= lenB; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
+    }
+    ;[prev, curr] = [curr, prev]
+  }
+
+  const distance = prev[lenB]
+  return 1.0 - distance / Math.max(lenA, lenB)
 }

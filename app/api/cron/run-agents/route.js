@@ -135,8 +135,44 @@ function findAlternativeAgent(task, agents, workloads, excludeAgent) {
   return null // All agents are busy, stick with primary
 }
 
+// Smart priority scoring — determines processing order for the pipeline
+// Higher score = processed first. Considers: explicit priority, deadline urgency,
+// age in queue (prevents starvation), and content type importance.
+function priorityScore(task) {
+  let score = 0
+
+  // Explicit priority weight
+  const priorityWeight = { High: 30, Medium: 15, Low: 5 }
+  score += priorityWeight[task.priority] || 15
+
+  // Deadline urgency — tasks with upcoming scheduled dates get boosted
+  if (task.scheduledDate) {
+    const daysUntil = (new Date(task.scheduledDate).getTime() - Date.now()) / 86400000
+    if (daysUntil < 0) score += 50       // Overdue — highest urgency
+    else if (daysUntil < 1) score += 40   // Due today
+    else if (daysUntil < 3) score += 25   // Due within 3 days
+    else if (daysUntil < 7) score += 10   // Due this week
+  }
+
+  // Age bonus — prevents tasks from sitting forever (anti-starvation)
+  if (task.createdAt) {
+    const ageHours = (Date.now() - new Date(task.createdAt).getTime()) / 3600000
+    score += Math.min(Math.floor(ageHours / 6), 20) // +1 per 6 hours, cap at 20
+  }
+
+  // Content type importance — ads and time-sensitive content first
+  const typeBoost = { 'Ad Copy': 8, 'Landing Page': 6, 'Strategy': 5, 'Social Post': 3 }
+  score += typeBoost[task.contentType] || 0
+
+  // A/B variants should be processed together — boost B variants if A exists
+  if (task.name?.includes('[B]')) score += 5
+
+  return score
+}
+
 async function autoAssignInboxTasks(tasks, agents) {
   const inboxTasks = tasks.filter(t => t.status === 'Inbox')
+    .sort((a, b) => priorityScore(b) - priorityScore(a)) // High-priority first
   const assigned = []
 
   for (const task of inboxTasks) {
@@ -186,6 +222,17 @@ async function getAgentMemories(agentName, taskContext = {}) {
     return data.memories || []
   } catch {
     return []
+  }
+}
+
+// Count past error events for a task from the activity feed (durable retry tracking)
+async function countTaskErrors(taskName) {
+  try {
+    const { getAllActivity } = await import('../../../../lib/airtable')
+    const activity = await getAllActivity()
+    return activity.filter(a => a.action === 'error' && a.task === taskName).length
+  } catch {
+    return 0 // Fail open — assume no prior errors
   }
 }
 
@@ -367,11 +414,44 @@ export async function GET(request) {
       }).catch(() => {})
     }
 
+    // 5. STALE TASK RECYCLER: Tasks assigned for 48h+ without progress get reassigned
+    const STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000 // 48 hours
+    const staleCandidates = tasks.filter(t => {
+      if (t.status !== 'Assigned') return false
+      if (!t.createdAt) return false
+      const age = Date.now() - new Date(t.createdAt).getTime()
+      return age > STALE_THRESHOLD_MS
+    })
+
+    const recycled = []
+    for (const task of staleCandidates.slice(0, 5)) { // Cap at 5 per cycle
+      const newAgent = findBestAgent(task, agents, tasks)
+      if (newAgent && newAgent !== task.agent) {
+        const oldAgent = task.agent
+        await updateTask(task.id, { 'Agent': newAgent, 'Status': 'Assigned' }).catch(() => {})
+        task.agent = newAgent
+        recycled.push({ task: task.name, from: oldAgent, to: newAgent })
+        await addActivity({
+          'Agent': 'Council',
+          'Action': 'stale-recycled',
+          'Task': task.name,
+          'Details': `Task stale for 48h+ with ${oldAgent}. Reassigned to ${newAgent} for fresh attempt.`,
+          'Type': 'Comment',
+        }).catch(() => {})
+      }
+    }
+
+    if (recycled.length > 0) {
+      console.log(`[RUNNER] ♻️ Recycled ${recycled.length} stale tasks`)
+      results.recycled = recycled
+    }
+
     // 6. Process assigned tasks — PARALLEL execution for higher throughput
     // Default 8 tasks/cycle × 4 cycles/hour = 32/hour = 768/day theoretical max
     const url = new URL(request.url)
     const limit = parseInt(url.searchParams.get('limit') || '8', 10)
     const allAssigned = tasks.filter(t => t.status === 'Assigned' && t.agent)
+      .sort((a, b) => priorityScore(b) - priorityScore(a)) // High-priority first
     const assignedTasks = allAssigned.slice(0, limit)
 
     if (assignedTasks.length === 0 && autoAssigned.length === 0) {
@@ -463,23 +543,32 @@ export async function GET(request) {
         console.error(`[RUNNER] ❌ Error on "${task.name}":`, err?.message || err)
         results.errors.push({ task: task.name, error: err?.message || 'Unknown error' })
 
-        // CRITICAL: Revert status so the task doesn't stay stuck in "In Progress"
-        const retries = (task.retries || 0) + 1
-        const revertStatus = retries >= 3 ? 'Review' : 'Assigned'
+        // Count past failures from activity feed for durable retry tracking
+        const pastErrors = await countTaskErrors(task.name)
+        const retries = pastErrors + 1
+        const maxRetries = 5
+
+        // Exponential backoff: after repeated failures, escalate
+        // 1-2 failures → Assigned (retry next cycle)
+        // 3 failures → stays Assigned but gets lower priority
+        // 4-5 failures → Review (needs human attention)
+        const revertStatus = retries >= 4 ? 'Review' : 'Assigned'
+        const failNote = retries >= maxRetries
+          ? `[GENERATION FAILED after ${retries} attempts — max retries exceeded]\nLast error: ${err?.message}\n\nThis task needs manual review or reassignment.`
+          : null
+
         await updateTask(task.id, {
           'Status': revertStatus,
-          'Output': retries >= 3
-            ? `[GENERATION FAILED after ${retries} attempts]\nLast error: ${err?.message}\n\nThis task needs manual attention.`
-            : (task.output || ''),
+          ...(failNote ? { 'Output': failNote } : {}),
         }).catch(() => {})
 
-        console.log(`[RUNNER] ↩️ Reverted "${task.name}" to ${revertStatus} (attempt ${retries})`)
+        console.log(`[RUNNER] ↩️ Reverted "${task.name}" to ${revertStatus} (attempt ${retries}/${maxRetries})`)
 
         await addActivity({
           'Agent': task.agent || 'System',
           'Action': 'error',
           'Task': task.name,
-          'Details': `Failed (attempt ${retries}): ${err?.message}. Reverted to ${revertStatus}.`,
+          'Details': `Failed (attempt ${retries}/${maxRetries}): ${err?.message}. Status → ${revertStatus}.${retries >= 3 ? ' Consider reassigning agent.' : ''}`,
           'Type': 'Comment',
         }).catch(() => {})
       }

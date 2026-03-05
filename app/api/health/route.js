@@ -41,7 +41,7 @@ async function checkAI(provider) {
     },
     google: {
       url: 'https://generativelanguage.googleapis.com/v1beta/models',
-      hasKey: !!process.env.GOOGLE_AI_KEY,
+      hasKey: !!process.env.GOOGLE_AI_API_KEY,
     },
   }
 
