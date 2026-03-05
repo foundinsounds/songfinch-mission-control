@@ -867,7 +867,7 @@ async function processTask(task, agent, memoryCache, activity) {
   let output
 
   // IMAGE TASKS: Route to Gemini/Nano Banana image generation
-  if (task.contentType === 'Image' && process.env.GOOGLE_AI_KEY) {
+  if (task.contentType === 'Image' && (process.env.GOOGLE_AI_KEY || process.env.GOOGLE_AI_API_KEY)) {
     const territory = task.description?.match(/Territory:\s*(Celebration|Gratitude|Memory|Identity|Tribute)/i)?.[1]
     const platform = Array.isArray(task.platform) ? task.platform[0] : task.platform
     const preset = autoPreset(task.contentType, platform)
