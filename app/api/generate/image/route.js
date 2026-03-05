@@ -1,8 +1,8 @@
-// Image Generation API — DALL-E 3 visual creation for Songfinch content
+// Image Generation API — Gemini/Nano Banana visual creation for Songfinch content
 // Called by: PIXEL agent pipeline, manual dashboard trigger, post-approval hook
 // Generates brand-aware marketing visuals tied to emotional territories
 
-import { generateImage, autoPreset, extractVisualPrompt } from '../../../../lib/dalle'
+import { generateImage, autoPreset, extractVisualPrompt } from '../../../../lib/gemini-image'
 import { addActivity, addContent } from '../../../../lib/airtable'
 import { NextResponse } from 'next/server'
 
@@ -58,7 +58,7 @@ export async function POST(request) {
 
     console.log(`[IMAGE-GEN] Generating: "${imagePrompt.substring(0, 80)}..." preset=${preset}`)
 
-    // Generate with DALL-E 3
+    // Generate with Gemini/Nano Banana
     const result = await generateImage({
       prompt: imagePrompt,
       preset,
@@ -72,7 +72,7 @@ export async function POST(request) {
       'Agent': agent,
       'Action': 'generated image',
       'Task': taskName || 'Manual Generation',
-      'Details': `DALL-E 3 ${preset} (${result.size}). Territory: ${territory || 'N/A'}. Prompt: ${imagePrompt.substring(0, 200)}`,
+      'Details': `Gemini ${preset} (${result.size}). Territory: ${territory || 'N/A'}. Prompt: ${imagePrompt.substring(0, 200)}`,
       'Type': 'Content Generated',
     }).catch(err => console.warn('[IMAGE-GEN] Activity log failed:', err.message))
 
