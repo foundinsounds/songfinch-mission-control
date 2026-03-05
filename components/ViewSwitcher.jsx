@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react'
 const PRIMARY_VIEWS = [
   { key: 'kanban', label: 'Board' },
   { key: 'list', label: 'List' },
+  { key: 'workflow', label: 'Workflow', icon: '⚡' },
   { key: 'inbox', label: 'Inbox' },
   { key: 'approvals', label: 'Approvals' },
   { key: 'calendar', label: 'Calendar' },
@@ -62,6 +63,7 @@ export default function ViewSwitcher({ currentView, onViewChange, inReview = 0, 
                 : 'text-gray-500 hover:text-gray-300 hover:bg-dark-600'
             }`}
           >
+            {view.icon && <span className="text-[10px]">{view.icon}</span>}
             {view.label}
             {badge > 0 && (
               <span className="bg-red-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-bold leading-none">{badge}</span>

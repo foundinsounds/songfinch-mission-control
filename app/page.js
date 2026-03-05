@@ -40,6 +40,7 @@ import WelcomeState from '../components/WelcomeState'
 import AgentHealthSparklines from '../components/AgentHealthSparklines'
 import BulkActions, { useTaskSelection } from '../components/BulkActions'
 import AgentWorkloadBalancer from '../components/AgentWorkloadBalancer'
+import AgentWorkflowLive from '../components/AgentWorkflowLive'
 import ViewTransition from '../components/ViewTransition'
 import SearchBar from '../components/SearchBar'
 import QuickFiltersBar from '../components/QuickFiltersBar'
@@ -639,6 +640,9 @@ export default function Roundtable() {
       case 'view-list':
         setCurrentView('list')
         break
+      case 'view-workflow':
+        setCurrentView('workflow')
+        break
       case 'view-agents':
         setCurrentView('agents')
         break
@@ -959,6 +963,14 @@ export default function Roundtable() {
                 onTaskClick={setSelectedTask}
                 onQuickApprove={handleApproveTask}
                 onRetry={handleRetryTask}
+              />
+            )}
+            {currentView === 'workflow' && (
+              <AgentWorkflowLive
+                agents={agents}
+                tasks={tasks}
+                activity={activity}
+                onAgentClick={(agent) => setConfigAgent(agent)}
               />
             )}
             {currentView === 'agents' && (
