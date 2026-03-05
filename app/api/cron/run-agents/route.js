@@ -301,11 +301,11 @@ export async function GET(request) {
 
     // 2. AUTO-REVIEW FIRST: Clear the Review queue before doing anything else.
     // This lets agents pick up revised tasks and keeps content flowing to Done.
-    const reviewData = await triggerAutoReview()
-    results.reviewResults = reviewData
-    if (reviewData?.results) {
-      const approved = reviewData.results.approved?.length || 0
-      const revised = reviewData.results.revised?.length || 0
+    const preReviewData = await triggerAutoReview()
+    results.reviewResults = preReviewData
+    if (preReviewData?.results) {
+      const approved = preReviewData.results.approved?.length || 0
+      const revised = preReviewData.results.revised?.length || 0
       if (approved + revised > 0) {
         console.log(`[RUNNER] Pre-review: ${approved} approved, ${revised} revised`)
         // Re-fetch tasks after review to get updated statuses
