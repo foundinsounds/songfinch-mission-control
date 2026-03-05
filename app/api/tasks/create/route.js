@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 export async function POST(request) {
   try {
     const body = await request.json()
-    const { name, description, agent, contentType, priority, status } = body
+    const { name, description, agent, contentType, priority, status, scheduledDate, campaign, platform } = body
 
     if (!name) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 })
@@ -18,9 +18,10 @@ export async function POST(request) {
       'Priority': priority || 'Medium',
     }
 
-    if (agent) {
-      fields['Agent'] = agent
-    }
+    if (agent) fields['Agent'] = agent
+    if (scheduledDate) fields['Scheduled Date'] = scheduledDate
+    if (campaign) fields['Campaign'] = campaign
+    if (platform) fields['Platform'] = Array.isArray(platform) ? platform : [platform]
 
     const result = await createTask(fields)
 
@@ -29,7 +30,7 @@ export async function POST(request) {
       'Agent': agent || 'Council',
       'Action': agent ? 'assigned' : 'created',
       'Task': name,
-      'Details': `Task created via calendar${agent ? ` and assigned to ${agent}` : ''}`,
+      'Details': `Task created${scheduledDate ? ` for ${scheduledDate}` : ''}${agent ? ` and assigned to ${agent}` : ''}`,
       'Type': 'Task Created',
     }).catch(() => {})
 

@@ -17,7 +17,7 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const CONTENT_TYPES = ['Ad Copy', 'Social Post', 'Video Script', 'Blog Post', 'Landing Page', 'Strategy', 'General']
 const PRIORITIES = ['High', 'Medium', 'Low']
 
-export default function ContentCalendar({ tasks, agents, onTaskClick }) {
+export default function ContentCalendar({ tasks, agents, onTaskClick, onRefresh }) {
   const today = new Date()
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
   const [currentYear, setCurrentYear] = useState(today.getFullYear())
@@ -27,12 +27,22 @@ export default function ContentCalendar({ tasks, agents, onTaskClick }) {
     name: '', description: '', agent: '', contentType: 'General', priority: 'Medium',
   })
 
-  // Map tasks to calendar dates
+  // Extract scheduled date from description metadata (fallback when Airtable field missing)
+  function extractScheduledDate(task) {
+    if (task.scheduledDate) return task.scheduledDate
+    // Look for "Scheduled: YYYY-MM-DD" in description metadata
+    const match = task.description?.match(/Scheduled:\s*(\d{4}-\d{2}-\d{2})/)
+    if (match) return match[1]
+    return null
+  }
+
+  // Map tasks to calendar dates — prefer scheduledDate, then description metadata, then createdAt
   const tasksByDate = useMemo(() => {
     const map = {}
     tasks.forEach(task => {
-      if (!task.createdAt) return
-      const date = new Date(task.createdAt)
+      const dateStr = extractScheduledDate(task) || task.createdAt
+      if (!dateStr) return
+      const date = new Date(dateStr)
       const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
       if (!map[key]) map[key] = []
       map[key].push(task)
@@ -69,12 +79,20 @@ export default function ContentCalendar({ tasks, agents, onTaskClick }) {
     }
   }
 
+  // Convert dateKey (YYYY-M-D) to ISO date string for Airtable
+  function dateKeyToISO(dateKey) {
+    const [y, m, d] = dateKey.split('-').map(Number)
+    const date = new Date(y, m, d)
+    return date.toISOString().split('T')[0] // YYYY-MM-DD
+  }
+
   // Schedule a task on a specific date
   async function handleScheduleTask(e) {
     e.preventDefault()
     if (!newTask.name.trim()) return
     setScheduling(true)
     try {
+      const scheduledDate = showScheduleModal ? dateKeyToISO(showScheduleModal) : undefined
       const res = await fetch('/api/tasks/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,12 +103,13 @@ export default function ContentCalendar({ tasks, agents, onTaskClick }) {
           contentType: newTask.contentType,
           priority: newTask.priority,
           status: newTask.agent ? 'Assigned' : 'Inbox',
+          scheduledDate,
         }),
       })
       if (res.ok) {
         setShowScheduleModal(null)
         setNewTask({ name: '', description: '', agent: '', contentType: 'General', priority: 'Medium' })
-        // Parent will refresh data via polling
+        if (onRefresh) onRefresh()
       }
     } catch (err) {
       console.error('Failed to schedule task:', err)
@@ -214,7 +233,14 @@ export default function ContentCalendar({ tasks, agents, onTaskClick }) {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowScheduleModal(null)}>
           <div className="bg-dark-800 border border-dark-500 rounded-xl w-[480px] max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-dark-500 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-gray-200">Schedule Agent Task</h3>
+              <div>
+                <h3 className="text-sm font-bold text-gray-200">Schedule Agent Task</h3>
+                {showScheduleModal && (
+                  <p className="text-[10px] text-accent-orange mt-0.5">
+                    {(() => { const [y,m,d] = showScheduleModal.split('-').map(Number); return new Date(y,m,d).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) })()}
+                  </p>
+                )}
+              </div>
               <button onClick={() => setShowScheduleModal(null)} className="text-gray-500 hover:text-gray-300">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>

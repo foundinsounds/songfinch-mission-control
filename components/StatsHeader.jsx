@@ -49,7 +49,7 @@ function CronCountdown() {
   )
 }
 
-export default function StatsHeader({ stats, currentTime, dataSource, lastSync, theme, onToggleTheme, onRunAgents, runningAgents, onOpenSettings }) {
+export default function StatsHeader({ stats, currentTime, dataSource, lastSync, theme, onToggleTheme, onRunAgents, runningAgents, onOpenSettings, onPlanCampaign, planningCampaign }) {
   const formatTime = (date) => {
     return date.toLocaleTimeString('en-US', {
       hour: '2-digit',
@@ -125,6 +125,30 @@ export default function StatsHeader({ stats, currentTime, dataSource, lastSync, 
             </>
           )}
         </button>
+        {/* Plan Campaign */}
+        {onPlanCampaign && (
+          <button
+            onClick={onPlanCampaign}
+            disabled={planningCampaign}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wider transition-all ${
+              planningCampaign
+                ? 'bg-accent-purple/20 text-accent-purple border border-accent-purple/30 cursor-wait'
+                : 'bg-accent-purple/10 text-accent-purple border border-accent-purple/20 hover:bg-accent-purple/20 hover:border-accent-purple/40'
+            }`}
+          >
+            {planningCampaign ? (
+              <>
+                <div className="w-2.5 h-2.5 border-2 border-accent-purple/30 border-t-accent-purple rounded-full animate-spin" />
+                Planning
+              </>
+            ) : (
+              <>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                Plan
+              </>
+            )}
+          </button>
+        )}
         <CronCountdown />
 
         <div className="w-px h-4 bg-dark-500" />

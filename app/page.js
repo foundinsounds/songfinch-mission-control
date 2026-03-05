@@ -47,6 +47,7 @@ export default function Roundtable() {
   const [showChat, setShowChat] = useState(false)
   const [currentView, setCurrentView] = useState('kanban')
   const [feedCollapsed, setFeedCollapsed] = useState(false)
+  const [planningCampaign, setPlanningCampaign] = useState(false)
 
   // Settings revision counter — bumped when localStorage changes
   const [settingsRev, setSettingsRev] = useState(0)
@@ -241,6 +242,21 @@ export default function Roundtable() {
     }
   }, [fetchData])
 
+  // Plan Campaign — trigger CMO content planner
+  const handlePlanCampaign = useCallback(async () => {
+    setPlanningCampaign(true)
+    try {
+      const res = await fetch('/api/campaigns/plan', { method: 'POST' })
+      const data = await res.json()
+      console.log('[Roundtable] Campaign plan result:', data)
+      setTimeout(fetchData, 2000)
+    } catch (err) {
+      console.error('Failed to plan campaign:', err)
+    } finally {
+      setTimeout(() => setPlanningCampaign(false), 3000)
+    }
+  }, [fetchData])
+
   // Command Bar handler
   const handleCommand = useCallback((command, entity) => {
     switch (command) {
@@ -354,6 +370,8 @@ export default function Roundtable() {
         onToggleTheme={toggleTheme}
         onRunAgents={handleRunAgents}
         runningAgents={runningAgents}
+        onPlanCampaign={handlePlanCampaign}
+        planningCampaign={planningCampaign}
         onOpenSettings={() => setShowSettings(true)}
       />
 
@@ -409,7 +427,7 @@ export default function Roundtable() {
               <SmartInbox tasks={tasks} agents={agents} onTaskClick={setSelectedTask} />
             )}
             {currentView === 'calendar' && (
-              <ContentCalendar tasks={tasks} agents={agents} onTaskClick={setSelectedTask} />
+              <ContentCalendar tasks={tasks} agents={agents} onTaskClick={setSelectedTask} onRefresh={fetchData} />
             )}
             {currentView === 'campaigns' && (
               <CampaignPlanner tasks={tasks} agents={agents} />
