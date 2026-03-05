@@ -17,6 +17,7 @@ import {
   needsMuseQA,
 } from '../../../../lib/orchestration'
 import { generateImage, autoPreset, extractVisualPrompt } from '../../../../lib/hf-image'
+import { uploadImage } from '../../../../lib/blob-upload'
 import { generateVideo, generateVideoFromText, buildVideoPrompt } from '../../../../lib/ltx'
 import { FRAMEWORK_BRIEF } from '../../../../lib/framework'
 import { buildDesignContext, isFigmaConfigured } from '../../../../lib/figma'
@@ -882,6 +883,13 @@ async function processTask(task, agent, memoryCache, activity) {
       contentType: 'Image',
       taskName: task.name,
     })
+
+    // Upload base64 to Vercel Blob for permanent HTTP URL (Airtable gallery compatible)
+    const permanentUrl = await uploadImage(imageResult.url, task.name || 'songfinch-image')
+    if (permanentUrl !== imageResult.url) {
+      console.log(`[RUNNER] Image uploaded to Blob: ${permanentUrl}`)
+      imageResult.url = permanentUrl
+    }
 
     output = `IMAGE GENERATED\n\nURL: ${imageResult.url}\n\nRevised Prompt: ${imageResult.revisedPrompt || 'N/A'}\n\nPreset: ${preset}\nSize: ${imageResult.size}\nTerritory: ${territory || 'N/A'}\nOriginal Prompt: ${imagePrompt}`
   }

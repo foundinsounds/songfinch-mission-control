@@ -3,6 +3,7 @@
 // Generates brand-aware marketing visuals tied to emotional territories
 
 import { generateImage, autoPreset, extractVisualPrompt } from '../../../../lib/hf-image'
+import { uploadImage } from '../../../../lib/blob-upload'
 import { addActivity, addContent } from '../../../../lib/airtable'
 import { NextResponse } from 'next/server'
 
@@ -66,6 +67,14 @@ export async function POST(request) {
       contentType: contentType || null,
       taskName: taskName || null,
     })
+
+    // Upload base64 data URL to Vercel Blob for a permanent HTTP URL
+    // Falls back to data URL if BLOB_READ_WRITE_TOKEN is not configured
+    const permanentUrl = await uploadImage(result.url, taskName || 'songfinch-image')
+    if (permanentUrl !== result.url) {
+      console.log(`[IMAGE-GEN] Uploaded to Blob: ${permanentUrl}`)
+      result.url = permanentUrl
+    }
 
     // Log activity
     await addActivity({
