@@ -27,11 +27,105 @@ const STATUS_ANIMATIONS = {
   sleeping: { speed: 1200, label: 'Sleeping' },
 }
 
+// ── MOVEMENT DESTINATIONS ──────────────────────────────
+// Named spots agents can walk to (percentages of office floor)
+const DESTINATIONS = {
+  roundtable:   { x: 50, y: 50, label: '☕ Meeting' },
+  coffee:       { x: 8,  y: 50, label: '☕ Coffee break' },
+  waterCooler:  { x: 92, y: 50, label: '🚰 Water break' },
+  whiteboard:   { x: 50, y: 12, label: '📋 Brainstorming' },
+  window:       { x: 50, y: 88, label: '🪟 Thinking...' },
+}
+
+// ── MOVEMENT STATE MACHINE ──────────────────────────────
+// States: at_desk | walking_to | at_destination | returning
+function useMovement(agent, status) {
+  const [movementState, setMovementState] = useState({
+    phase: 'at_desk',          // at_desk | walking_to | at_destination | returning
+    destination: null,         // destination key from DESTINATIONS
+    progress: 0,               // 0-1 for interpolation
+    facingRight: true,         // character direction
+    walkFrame: 0,              // leg animation frame
+  })
+
+  const stateRef = useRef(movementState)
+  stateRef.current = movementState
+
+  // Walking agents move periodically. Idle/done agents wander more, working agents rarely leave desk.
+  useEffect(() => {
+    // Decide wander frequency based on status
+    const wanderChance = status === 'idle' ? 0.15 :
+                          status === 'done' ? 0.12 :
+                          status === 'review' ? 0.04 :
+                          status === 'working' ? 0.02 : 0.05
+
+    const tick = setInterval(() => {
+      setMovementState(prev => {
+        // PHASE: at_desk — maybe start wandering
+        if (prev.phase === 'at_desk') {
+          if (Math.random() < wanderChance) {
+            const destKeys = Object.keys(DESTINATIONS)
+            const dest = destKeys[Math.floor(Math.random() * destKeys.length)]
+            return {
+              ...prev,
+              phase: 'walking_to',
+              destination: dest,
+              progress: 0,
+              facingRight: DESTINATIONS[dest].x > 50, // face toward destination
+              walkFrame: 0,
+            }
+          }
+          return prev
+        }
+
+        // PHASE: walking_to — increment progress toward destination
+        if (prev.phase === 'walking_to') {
+          const newProgress = prev.progress + 0.04 + Math.random() * 0.02
+          if (newProgress >= 1) {
+            return { ...prev, phase: 'at_destination', progress: 1, walkFrame: 0 }
+          }
+          return { ...prev, progress: newProgress, walkFrame: prev.walkFrame + 1 }
+        }
+
+        // PHASE: at_destination — linger then start returning
+        if (prev.phase === 'at_destination') {
+          // Random chance to head back each tick
+          if (Math.random() < 0.08) {
+            return {
+              ...prev,
+              phase: 'returning',
+              progress: 1,
+              facingRight: !prev.facingRight, // turn around
+              walkFrame: 0,
+            }
+          }
+          return prev
+        }
+
+        // PHASE: returning — walk back to desk
+        if (prev.phase === 'returning') {
+          const newProgress = prev.progress - 0.04 - Math.random() * 0.02
+          if (newProgress <= 0) {
+            return { ...prev, phase: 'at_desk', progress: 0, destination: null, walkFrame: 0 }
+          }
+          return { ...prev, progress: newProgress, walkFrame: prev.walkFrame + 1 }
+        }
+
+        return prev
+      })
+    }, 400) // tick every 400ms for smooth walking
+
+    return () => clearInterval(tick)
+  }, [status])
+
+  return movementState
+}
+
 // ── UNIQUE PIXEL CHARACTER RENDERER ──────────────────────────────
 // Each agent now has a unique look based on hair style, skin tone, and accessories
-function PixelCharacter({ agent, status, frame, size = 4, onClick }) {
+// Added: walking animation with leg movement and direction awareness
+function PixelCharacter({ agent, status, frame, size = 4, onClick, facingRight = true, isWalking = false }) {
   const config = AGENT_CONFIG[agent] || AGENT_CONFIG.MUSE
-  const animState = STATUS_ANIMATIONS[status] || STATUS_ANIMATIONS.idle
 
   // Generate unique character grids per agent
   // 0=transparent, 1=skin, 2=primary, 3=accent, 4=hair, 5=white, 6=dark, 7=accessory
@@ -54,6 +148,36 @@ function PixelCharacter({ agent, status, frame, size = 4, onClick }) {
     }
 
     const hair = hairRows[config.hairStyle] || hairRows.short
+
+    // ── WALKING ANIMATION ──
+    if (isWalking) {
+      const legFrame = frame % 4
+      // 4-frame walk cycle: legs alternate stepping
+      const legs = legFrame === 0 ? [0,0,1,0,0,1,0,0] :
+                   legFrame === 1 ? [0,1,0,0,0,0,1,0] :
+                   legFrame === 2 ? [0,0,1,0,0,1,0,0] :
+                                    [0,0,0,1,1,0,0,0]
+      const feet = legFrame === 0 ? [0,0,6,0,0,6,0,0] :
+                   legFrame === 1 ? [0,6,0,0,0,0,6,0] :
+                   legFrame === 2 ? [0,0,6,0,0,6,0,0] :
+                                    [0,0,0,6,6,0,0,0]
+
+      // Bouncing body while walking
+      const armSwing = legFrame % 2 === 0
+        ? [0,1,2,2,2,2,0,0]  // arms swing left
+        : [0,0,2,2,2,2,1,0]  // arms swing right
+
+      return [
+        hair[0],
+        hair[1],
+        [0,1,6,1,1,6,1,0],
+        [0,1,1,1,1,1,1,0],
+        [0,0,2,2,2,2,0,0],
+        armSwing,
+        legs,
+        feet,
+      ]
+    }
 
     if (status === 'working') {
       // Typing animation — arms move
@@ -129,7 +253,13 @@ function PixelCharacter({ agent, status, frame, size = 4, onClick }) {
     ]
   }
 
-  const grid = getFrame()
+  let grid = getFrame()
+
+  // Flip horizontally if facing left
+  if (!facingRight) {
+    grid = grid.map(row => [...row].reverse())
+  }
+
   const colorMap = {
     0: 'transparent',
     1: config.skinTone,
@@ -332,7 +462,102 @@ function ProgressRing({ progress, color, size = 18 }) {
   )
 }
 
-// ── AGENT WORKSTATION (major upgrade) ──────────────────────────────
+// ── WALKING AGENT SPRITE ──────────────────────────────
+// An agent that has left their desk and is moving around the office
+function WalkingAgent({ agent, movement, status, onAgentClick, agentData }) {
+  const config = AGENT_CONFIG[agent]
+  const [frame, setFrame] = useState(0)
+  const [hovered, setHovered] = useState(false)
+  const isWalking = movement.phase === 'walking_to' || movement.phase === 'returning'
+
+  useEffect(() => {
+    const speed = isWalking ? 200 : 600
+    const interval = setInterval(() => setFrame(f => f + 1), speed)
+    return () => clearInterval(interval)
+  }, [isWalking])
+
+  const handleClick = useCallback(() => {
+    if (onAgentClick && agentData) {
+      onAgentClick(agentData)
+    }
+  }, [onAgentClick, agentData])
+
+  // Calculate position: interpolate between desk position (center of agent's slot) and destination
+  // Desk positions are handled by the parent — this component only needs the destination offset
+  const dest = DESTINATIONS[movement.destination]
+  if (!dest) return null
+
+  // Agent's "home" is 50% x (since this is absolutely positioned relative to parent)
+  // We interpolate from home toward destination
+  const t = movement.progress
+  const currentX = t * (dest.x - 50)  // offset from center
+  const currentY = t * (dest.y - 50)  // offset from center
+
+  const destLabel = movement.phase === 'at_destination' ? dest.label : null
+
+  return (
+    <div
+      className="absolute z-30 flex flex-col items-center cursor-pointer"
+      style={{
+        left: `calc(50% + ${currentX}%)`,
+        top: `calc(50% + ${currentY}%)`,
+        transform: 'translate(-50%, -50%)',
+        transition: 'left 0.35s ease, top 0.35s ease',
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={handleClick}
+    >
+      {/* Walking label */}
+      {destLabel && (
+        <div
+          className="text-[8px] font-mono px-1.5 py-0.5 rounded mb-1 whitespace-nowrap animate-bounce-subtle"
+          style={{ backgroundColor: config.color + '20', color: config.color }}
+        >
+          {destLabel}
+        </div>
+      )}
+
+      {/* Shadow blob under character */}
+      <div
+        className="absolute bottom-0 w-6 h-1.5 rounded-full opacity-30"
+        style={{ backgroundColor: config.color, filter: 'blur(2px)' }}
+      />
+
+      {/* The walking character */}
+      <div className={`transition-transform duration-100 ${isWalking ? (frame % 2 === 0 ? '-translate-y-px' : 'translate-y-px') : ''}`}>
+        <PixelCharacter
+          agent={agent}
+          status={isWalking ? 'idle' : status}
+          frame={frame}
+          size={4}
+          facingRight={movement.facingRight}
+          isWalking={isWalking}
+        />
+      </div>
+
+      {/* Name tag while walking */}
+      <div
+        className="mt-0.5 px-1.5 py-px rounded text-[8px] font-bold tracking-wider opacity-80"
+        style={{ backgroundColor: config.color + '20', color: config.color }}
+      >
+        {agent}
+      </div>
+
+      {/* Hover card while walking */}
+      {hovered && (
+        <div
+          className="absolute -bottom-10 left-1/2 -translate-x-1/2 bg-gray-800/95 backdrop-blur text-[9px] px-2 py-1 rounded-lg z-50 whitespace-nowrap border"
+          style={{ borderColor: config.color + '30', color: config.color }}
+        >
+          {movement.phase === 'at_destination' ? dest.label : movement.phase === 'walking_to' ? '🚶 Walking...' : '🚶 Returning...'}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── AGENT WORKSTATION (with movement integration) ──────────────────────────────
 function AgentStation({ agent, tasks, agentData, onAgentClick }) {
   const [frame, setFrame] = useState(0)
   const [showBubble, setShowBubble] = useState(false)
@@ -371,6 +596,10 @@ function AgentStation({ agent, tasks, agentData, onAgentClick }) {
 
   const animConfig = STATUS_ANIMATIONS[status]
 
+  // Movement system — agent may wander around the office
+  const movement = useMovement(agent, status)
+  const isAway = movement.phase !== 'at_desk'
+
   useEffect(() => {
     const interval = setInterval(() => setFrame(f => f + 1), animConfig.speed)
     return () => clearInterval(interval)
@@ -403,76 +632,104 @@ function AgentStation({ agent, tasks, agentData, onAgentClick }) {
   }, [onAgentClick, agentData])
 
   return (
-    <div
-      className={`relative flex flex-col items-center gap-1 group transition-transform duration-200 ${hovered ? 'scale-110 -translate-y-1' : ''}`}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {/* Floating particles */}
-      <Particles status={status} color={config.color} />
-
-      {/* Speech bubble */}
-      <SpeechBubble text={bubbleText} visible={showBubble || hovered} color={config.color} />
-
-      {/* Status indicator with progress ring */}
-      <div className="relative">
-        <div
-          className="w-2.5 h-2.5 rounded-full animate-pulse"
-          style={{ backgroundColor: statusColor, boxShadow: `0 0 6px ${statusColor}` }}
-        />
-        {activeTasks.length > 0 && (
-          <ProgressRing progress={progress} color={config.color} size={16} />
-        )}
-      </div>
-
-      {/* Character (clickable) */}
-      <div className="relative cursor-pointer" onClick={handleClick}>
-        <PixelCharacter agent={agent} status={status} frame={frame} size={4} />
-        {/* Click hint on hover */}
-        {hovered && (
-          <div className="absolute -right-1 -top-1 w-3 h-3 bg-white/20 rounded-full flex items-center justify-center animate-ping pointer-events-none">
-            <div className="w-1.5 h-1.5 bg-white rounded-full" />
-          </div>
-        )}
-      </div>
-
-      {/* Desk with colored screen */}
-      <div className="-mt-1">
-        <PixelDesk status={status} agentColor={config.color} size={3} />
-      </div>
-
-      {/* Agent name plate */}
+    <div className="relative flex flex-col items-center gap-1">
+      {/* The desk station — always visible */}
       <div
-        className="mt-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold tracking-wider cursor-pointer hover:brightness-125 transition-all"
-        style={{ backgroundColor: config.color + '25', color: config.color, borderBottom: `2px solid ${config.color}40` }}
-        onClick={handleClick}
+        className={`relative flex flex-col items-center gap-1 group transition-all duration-200 ${hovered ? 'scale-110 -translate-y-1' : ''} ${isAway ? 'opacity-60' : ''}`}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
       >
-        {config.emoji} {agent}
-      </div>
+        {/* Floating particles (only when at desk) */}
+        {!isAway && <Particles status={status} color={config.color} />}
 
-      {/* Task stats bar */}
-      <div className="flex items-center gap-1 mt-0.5">
-        {inProgress.length > 0 && <span className="text-[8px] px-1 py-px rounded bg-green-500/20 text-green-400 font-mono">{inProgress.length} active</span>}
-        {inReview.length > 0 && <span className="text-[8px] px-1 py-px rounded bg-yellow-500/20 text-yellow-400 font-mono">{inReview.length} review</span>}
-        {activeTasks.length === 0 && done.length > 0 && <span className="text-[8px] px-1 py-px rounded bg-blue-500/20 text-blue-400 font-mono">✓ {done.length}</span>}
-        {agentTasks.length === 0 && <span className="text-[8px] text-gray-600 font-mono">standby</span>}
-      </div>
+        {/* Speech bubble (only when at desk) */}
+        {!isAway && <SpeechBubble text={bubbleText} visible={showBubble || hovered} color={config.color} />}
 
-      {/* Expanded hover card */}
-      {hovered && (
-        <div
-          className="absolute -bottom-24 left-1/2 -translate-x-1/2 bg-gray-800/95 backdrop-blur text-white text-[10px] px-3 py-2 rounded-lg z-40 whitespace-nowrap pointer-events-none border"
-          style={{ borderColor: config.color + '30' }}
-        >
-          <div className="font-bold mb-1" style={{ color: config.color }}>{config.role}</div>
-          <div className="flex gap-3 text-gray-400">
-            <span>📝 {assigned.length}</span>
-            <span>⚡ {inProgress.length}</span>
-            <span>📋 {inReview.length}</span>
-            <span>✅ {done.length}</span>
-          </div>
-          <div className="text-[9px] text-gray-500 mt-1">Click to configure</div>
+        {/* Status indicator with progress ring */}
+        <div className="relative">
+          <div
+            className="w-2.5 h-2.5 rounded-full animate-pulse"
+            style={{ backgroundColor: statusColor, boxShadow: `0 0 6px ${statusColor}` }}
+          />
+          {activeTasks.length > 0 && (
+            <ProgressRing progress={progress} color={config.color} size={16} />
+          )}
         </div>
+
+        {/* Character at desk (hidden when away, replaced by empty chair indicator) */}
+        {!isAway ? (
+          <div className="relative cursor-pointer" onClick={handleClick}>
+            <PixelCharacter agent={agent} status={status} frame={frame} size={4} />
+            {/* Click hint on hover */}
+            {hovered && (
+              <div className="absolute -right-1 -top-1 w-3 h-3 bg-white/20 rounded-full flex items-center justify-center animate-ping pointer-events-none">
+                <div className="w-1.5 h-1.5 bg-white rounded-full" />
+              </div>
+            )}
+          </div>
+        ) : (
+          // Empty chair indicator — agent is walking around
+          <div className="w-8 h-8 flex items-center justify-center opacity-40 cursor-pointer" onClick={handleClick}>
+            <div className="text-[14px]">💺</div>
+          </div>
+        )}
+
+        {/* Desk with colored screen */}
+        <div className="-mt-1">
+          <PixelDesk status={isAway ? 'idle' : status} agentColor={config.color} size={3} />
+        </div>
+
+        {/* Agent name plate */}
+        <div
+          className="mt-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold tracking-wider cursor-pointer hover:brightness-125 transition-all"
+          style={{ backgroundColor: config.color + '25', color: config.color, borderBottom: `2px solid ${config.color}40` }}
+          onClick={handleClick}
+        >
+          {config.emoji} {agent}
+        </div>
+
+        {/* Task stats bar */}
+        <div className="flex items-center gap-1 mt-0.5">
+          {inProgress.length > 0 && <span className="text-[8px] px-1 py-px rounded bg-green-500/20 text-green-400 font-mono">{inProgress.length} active</span>}
+          {inReview.length > 0 && <span className="text-[8px] px-1 py-px rounded bg-yellow-500/20 text-yellow-400 font-mono">{inReview.length} review</span>}
+          {activeTasks.length === 0 && done.length > 0 && <span className="text-[8px] px-1 py-px rounded bg-blue-500/20 text-blue-400 font-mono">✓ {done.length}</span>}
+          {agentTasks.length === 0 && <span className="text-[8px] text-gray-600 font-mono">standby</span>}
+        </div>
+
+        {/* "Away" indicator */}
+        {isAway && (
+          <div className="text-[8px] text-gray-500 font-mono animate-pulse mt-0.5">
+            🚶 away
+          </div>
+        )}
+
+        {/* Expanded hover card */}
+        {hovered && (
+          <div
+            className="absolute -bottom-24 left-1/2 -translate-x-1/2 bg-gray-800/95 backdrop-blur text-white text-[10px] px-3 py-2 rounded-lg z-40 whitespace-nowrap pointer-events-none border"
+            style={{ borderColor: config.color + '30' }}
+          >
+            <div className="font-bold mb-1" style={{ color: config.color }}>{config.role}</div>
+            <div className="flex gap-3 text-gray-400">
+              <span>📝 {assigned.length}</span>
+              <span>⚡ {inProgress.length}</span>
+              <span>📋 {inReview.length}</span>
+              <span>✅ {done.length}</span>
+            </div>
+            <div className="text-[9px] text-gray-500 mt-1">Click to configure</div>
+          </div>
+        )}
+      </div>
+
+      {/* Walking sprite — renders as absolutely-positioned overlay when away from desk */}
+      {isAway && (
+        <WalkingAgent
+          agent={agent}
+          movement={movement}
+          status={status}
+          onAgentClick={onAgentClick}
+          agentData={agentData}
+        />
       )}
     </div>
   )
@@ -693,7 +950,7 @@ export default function PixelAgents({ tasks = [], agents = [], onAgentClick }) {
       </div>
 
       {/* Office floor */}
-      <div className="relative p-6 min-h-[340px]" ref={officeRef}>
+      <div className="relative p-6 min-h-[380px]" ref={officeRef}>
         {/* Collaboration lines */}
         <CollaborationLines tasks={tasks} agentPositions={agentPositions} />
 
@@ -702,6 +959,20 @@ export default function PixelAgents({ tasks = [], agents = [], onAgentClick }) {
         <OfficePlant x="calc(100% - 40px)" y={30} />
         <CoffeeMachine x={50} y={180} />
         <WaterCooler x="calc(100% - 60px)" y={180} />
+
+        {/* Destination markers (subtle floor dots showing where agents can go) */}
+        {Object.entries(DESTINATIONS).map(([key, dest]) => (
+          <div
+            key={key}
+            className="absolute w-2 h-2 rounded-full opacity-10"
+            style={{
+              left: `${dest.x}%`,
+              top: `${dest.y}%`,
+              backgroundColor: '#F59E0B',
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+        ))}
 
         {/* Top row of agents */}
         <div className="relative z-10 flex justify-around items-end mb-6">
