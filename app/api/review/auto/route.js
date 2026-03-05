@@ -44,26 +44,44 @@ export async function POST(request) {
       return NextResponse.json({ error: 'CHIEF agent not found' }, { status: 404 })
     }
 
-    // Process up to `limit` tasks — PARALLEL review calls
+    // Process up to `limit` tasks — BATCHED to avoid rate limits
     const toReview = reviewTasks.slice(0, limit)
 
-    // Fire all CHIEF review calls concurrently
-    const reviewResults = await Promise.allSettled(
-      toReview.map(async (task) => {
-        console.log(`[REVIEWER] Reviewing: "${task.name}" by ${task.agent}`)
+    // Process reviews in batches of 5 with delays between batches
+    // This prevents hitting the 30K input tokens/min rate limit
+    const BATCH_SIZE = 5
+    const BATCH_DELAY_MS = 12000 // 12s between batches — lets rate limit window slide
+    const reviewResults = []
 
-        const reviewPrompt = buildReviewPrompt(task)
+    for (let i = 0; i < toReview.length; i += BATCH_SIZE) {
+      const batch = toReview.slice(i, i + BATCH_SIZE)
 
-        const reviewOutput = await callAI({
-          model: chief.model || 'claude-sonnet-4-6',
-          temperature: chief.temperature || 0.4,
-          systemPrompt: chief.systemPrompt || 'You are CHIEF, the quality reviewer.',
-          userPrompt: reviewPrompt,
+      // Add delay between batches (not before the first)
+      if (i > 0) {
+        console.log(`[REVIEWER] Waiting ${BATCH_DELAY_MS / 1000}s before next batch (${i}/${toReview.length})...`)
+        await new Promise(r => setTimeout(r, BATCH_DELAY_MS))
+      }
+
+      // Fire batch in parallel (small enough to stay under rate limit)
+      const batchResults = await Promise.allSettled(
+        batch.map(async (task) => {
+          console.log(`[REVIEWER] Reviewing: "${task.name}" by ${task.agent}`)
+
+          const reviewPrompt = buildReviewPrompt(task)
+
+          const reviewOutput = await callAI({
+            model: chief.model || 'claude-sonnet-4-6',
+            temperature: chief.temperature || 0.4,
+            systemPrompt: chief.systemPrompt || 'You are CHIEF, the quality reviewer.',
+            userPrompt: reviewPrompt,
+          })
+
+          return { task, verdict: parseVerdict(reviewOutput) }
         })
+      )
 
-        return { task, verdict: parseVerdict(reviewOutput) }
-      })
-    )
+      reviewResults.push(...batchResults)
+    }
 
     // Process verdicts (Airtable writes — sequential to avoid rate limits)
     for (const result of reviewResults) {

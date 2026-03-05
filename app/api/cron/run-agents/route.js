@@ -433,17 +433,28 @@ export async function GET(request) {
       )
     )
 
-    // 9. PARALLEL PROCESSING: Execute all tasks concurrently
-    // Each task calls AI independently — no contention between different models/providers
-    const taskResults = await Promise.allSettled(
-      validTasks.map(({ task, agent }) => processTask(task, agent, memoryCache))
-    )
+    // 9. BATCHED PROCESSING: Execute tasks in small batches to avoid rate limits
+    // Batches of 4 with 10s delays — prevents 429s on Anthropic's 30K tokens/min limit
+    const TASK_BATCH_SIZE = 4
+    const TASK_BATCH_DELAY_MS = 10000
+    const taskResults = []
+
+    for (let bi = 0; bi < validTasks.length; bi += TASK_BATCH_SIZE) {
+      const batch = validTasks.slice(bi, bi + TASK_BATCH_SIZE)
+
+      if (bi > 0) {
+        console.log(`[RUNNER] Waiting ${TASK_BATCH_DELAY_MS / 1000}s before next batch (${bi}/${validTasks.length})...`)
+        await new Promise(r => setTimeout(r, TASK_BATCH_DELAY_MS))
+      }
+
+      const batchResults = await Promise.allSettled(
+        batch.map(({ task, agent }) => processTask(task, agent, memoryCache))
+      )
+      taskResults.push(...batchResults.map((r, i) => ({ result: r, task: batch[i].task })))
+    }
 
     // Collect results
-    for (let i = 0; i < taskResults.length; i++) {
-      const { task } = validTasks[i]
-      const result = taskResults[i]
-
+    for (const { task, result } of taskResults) {
       if (result.status === 'fulfilled') {
         results.processed.push(result.value)
         console.log(`[RUNNER] ✅ Completed: "${task.name}" (${result.value.outputLength} chars)`)
