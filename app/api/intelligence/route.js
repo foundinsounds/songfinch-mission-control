@@ -2,7 +2,7 @@
 // Powers the Intelligence tab in the dashboard
 // Computes: agent rankings, A/B winners, territory performance, memory utilization, pipeline health
 
-import { getTasks, getAgents, getActivityFeed } from '../../../lib/airtable'
+import { getTasks, getAgents, getAllActivity } from '../../../lib/airtable'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -12,7 +12,7 @@ export async function GET() {
     const [tasks, agents, activity] = await Promise.all([
       getTasks({ noCache: true }),
       getAgents({ noCache: true }),
-      getActivityFeed(),
+      getAllActivity(), // Full activity feed (paginated) — not limited to 20 records
     ])
 
     const now = new Date()
