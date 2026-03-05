@@ -3,7 +3,7 @@
 // Full pipeline: Auto-plan → Auto-assign → Process → Self-check → Auto-review → Learn
 // Target: 30+ pieces of content per day
 
-import { getTasks, getAgents, updateTask, addActivity, addContent, getAllActivity, getTasksByCampaign, getCampaignNames, createTask } from '../../../../lib/airtable'
+import { getActionableTasks, getAgents, updateTask, addActivity, addContent, getAllActivity, getTasksByCampaign, getCampaignNames, createTask } from '../../../../lib/airtable'
 import { callAI } from '../../../../lib/ai'
 import {
   sortByPriorityTier,
@@ -486,7 +486,7 @@ export async function GET(request) {
     // 1. Fetch tasks, agents, and activity history in parallel
     // Activity is now top-level — used by priority tiers, campaign context, and planning
     const [tasks, agents, activity] = await Promise.all([
-      getTasks({ noCache: true }),
+      getActionableTasks({ noCache: true }),
       getAgents({ noCache: true }),
       getAllActivity().catch(() => []),
     ])
@@ -501,7 +501,7 @@ export async function GET(request) {
       if (approved + revised > 0) {
         console.log(`[RUNNER] Pre-review: ${approved} approved, ${revised} revised`)
         // Re-fetch tasks after review to get updated statuses
-        const freshPostReview = await getTasks({ noCache: true })
+        const freshPostReview = await getActionableTasks({ noCache: true })
         tasks.length = 0
         tasks.push(...freshPostReview)
       }
@@ -512,7 +512,7 @@ export async function GET(request) {
     results.planResults = planData
     if (planData?.tasksCreated > 0) {
       // Re-fetch tasks to pick up new ones
-      const freshTasks = await getTasks({ noCache: true })
+      const freshTasks = await getActionableTasks({ noCache: true })
       tasks.length = 0
       tasks.push(...freshTasks)
     }
@@ -523,7 +523,7 @@ export async function GET(request) {
     if (creativeDirectionTasks.length > 0) {
       results.creativeDirection = creativeDirectionTasks
       // Re-fetch tasks to include newly created MUSE tasks
-      const freshTasks = await getTasks({ noCache: true })
+      const freshTasks = await getActionableTasks({ noCache: true })
       tasks.length = 0
       tasks.push(...freshTasks)
     }
