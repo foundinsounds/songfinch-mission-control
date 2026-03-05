@@ -2,12 +2,18 @@
 // Approves good work (→ Done) or sends back with feedback (→ Assigned)
 // Called by cron runner after processing, or manually from dashboard
 
-import { getTasks, getAgents, updateTask, addActivity } from '../../../../lib/airtable'
+import { getTasks, getAgents, updateTask, addActivity, getAllActivity, getTasksByCampaign } from '../../../../lib/airtable'
 import { callAI } from '../../../../lib/ai'
 import { QUALITY_RUBRIC } from '../../../../lib/framework'
 import { generateImage, autoPreset, extractVisualPrompt } from '../../../../lib/dalle'
 import { exportToDrive, isDriveConfigured } from '../../../../lib/drive'
 import { notifyApproved, notifyRevised, notifyReviewCycle } from '../../../../lib/slack'
+import {
+  needsMuseQA,
+  buildMuseQAPrompt,
+  parseMuseQAVerdict,
+  buildCampaignContext,
+} from '../../../../lib/orchestration'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -19,16 +25,17 @@ export async function GET(request) {
 
 export async function POST(request) {
   const startTime = Date.now()
-  const results = { approved: [], revised: [], errors: [] }
+  const results = { approved: [], revised: [], musePolished: [], errors: [] }
 
   try {
     const body = await request.json().catch(() => ({}))
     const limit = body.limit || 15 // Aggressive: clear Review queue fast so agents keep creating
 
     // Fetch tasks in Review status
-    const [tasks, agents] = await Promise.all([
+    const [tasks, agents, activity] = await Promise.all([
       getTasks({ noCache: true }),
       getAgents({ noCache: true }),
+      getAllActivity().catch(() => []),
     ])
 
     const reviewTasks = tasks.filter(t => t.status === 'Review' && t.output)
@@ -44,6 +51,7 @@ export async function POST(request) {
     if (!chief) {
       return NextResponse.json({ error: 'CHIEF agent not found' }, { status: 404 })
     }
+    const muse = agents.find(a => a.name === 'MUSE')
 
     // Process up to `limit` tasks — BATCHED to avoid rate limits
     const toReview = reviewTasks.slice(0, limit)
@@ -68,6 +76,47 @@ export async function POST(request) {
         batch.map(async (task) => {
           console.log(`[REVIEWER] Reviewing: "${task.name}" by ${task.agent}`)
 
+          // ── MUSE Creative QA Gate ──
+          // Creative content goes through MUSE first; only PASS content reaches CHIEF
+          if (muse && needsMuseQA(task)) {
+            try {
+              let campaignCtx = null
+              if (task.campaign && activity.length > 0) {
+                const campaignTasks = await getTasksByCampaign(task.campaign, { noCache: true }).catch(() => [])
+                campaignCtx = buildCampaignContext(task.campaign, campaignTasks, activity)
+              }
+
+              const musePrompt = buildMuseQAPrompt(task, campaignCtx)
+              const museOutput = await callAI({
+                model: muse.model || 'claude-sonnet-4-6',
+                temperature: muse.temperature || 0.6,
+                systemPrompt: muse.systemPrompt || 'You are MUSE, the Creative Director.',
+                userPrompt: musePrompt,
+              })
+
+              const museVerdict = parseMuseQAVerdict(museOutput)
+              console.log(`[REVIEWER] 🎨 MUSE QA: "${task.name}" → ${museVerdict.verdict} (${museVerdict.score}/5)`)
+
+              if (museVerdict.verdict === 'NEEDS_POLISH') {
+                return {
+                  task,
+                  verdict: {
+                    approved: false,
+                    score: museVerdict.score,
+                    feedback: `[MUSE Creative QA] ${museVerdict.polishSuggestion || museVerdict.notes}`,
+                    summary: museVerdict.notes,
+                    learning: '',
+                    museGated: true,
+                  },
+                }
+              }
+              // PASS — continue to CHIEF review below
+            } catch (museErr) {
+              console.warn(`[REVIEWER] MUSE QA failed for "${task.name}", proceeding to CHIEF:`, museErr.message)
+            }
+          }
+
+          // ── CHIEF Quality Review ──
           const reviewPrompt = buildReviewPrompt(task)
 
           const reviewOutput = await callAI({
@@ -95,7 +144,41 @@ export async function POST(request) {
       const { task, verdict } = result.value
 
       try {
-        if (verdict.approved) {
+        if (verdict.museGated) {
+          // MUSE POLISH — creative refinement needed, sent back before CHIEF review
+          const polishOutput = `[CREATIVE POLISH REQUESTED by MUSE]\nFeedback: ${verdict.feedback}\n\n---PREVIOUS OUTPUT (v${getVersionNumber(task.output)})---\n${task.output}`
+
+          await Promise.all([
+            updateTask(task.id, {
+              'Status': 'Assigned',
+              'Output': polishOutput.substring(0, 100000),
+            }),
+            addActivity({
+              'Agent': 'MUSE',
+              'Action': 'creative-polish-requested',
+              'Task': task.name,
+              'Details': `Creative QA: needs polish (${verdict.score}/5). ${verdict.feedback}`.substring(0, 5000),
+              'Type': 'Comment',
+            }),
+          ])
+
+          results.musePolished.push({
+            task: task.name,
+            agent: task.agent,
+            score: verdict.score,
+            feedback: verdict.feedback,
+          })
+
+          notifyRevised({
+            task: task.name,
+            agent: task.agent,
+            score: verdict.score,
+            feedback: `[MUSE Creative QA] ${verdict.feedback}`,
+          }).catch(() => {})
+
+          console.log(`[REVIEWER] 🎨 MUSE polish requested: "${task.name}" (${verdict.score}/5)`)
+
+        } else if (verdict.approved) {
           // APPROVE — move to Done + learning + notifications (parallel)
           await Promise.all([
             updateTask(task.id, { 'Status': 'Done' }),
@@ -239,7 +322,7 @@ export async function POST(request) {
       'Agent': 'CHIEF',
       'Action': 'review cycle',
       'Task': 'Auto-Review',
-      'Details': `Reviewed ${toReview.length} tasks: ${results.approved.length} approved, ${results.revised.length} sent back. ${results.errors.length} errors.`,
+      'Details': `Reviewed ${toReview.length} tasks: ${results.approved.length} approved, ${results.revised.length} revised, ${results.musePolished.length} MUSE polish. ${results.errors.length} errors.`,
       'Type': 'Comment',
     }).catch(() => {})
 
@@ -248,6 +331,7 @@ export async function POST(request) {
       reviewed: toReview.length,
       approved: results.approved.length,
       revised: results.revised.length,
+      musePolished: results.musePolished.length,
       errors: results.errors.length,
     }).catch(() => {})
 

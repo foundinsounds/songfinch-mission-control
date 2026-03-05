@@ -3,8 +3,19 @@
 // Full pipeline: Auto-plan → Auto-assign → Process → Self-check → Auto-review → Learn
 // Target: 30+ pieces of content per day
 
-import { getTasks, getAgents, updateTask, addActivity, addContent } from '../../../../lib/airtable'
+import { getTasks, getAgents, updateTask, addActivity, addContent, getAllActivity, getTasksByCampaign, getCampaignNames, createTask } from '../../../../lib/airtable'
 import { callAI } from '../../../../lib/ai'
+import {
+  sortByPriorityTier,
+  assignPriorityTier,
+  buildCampaignContext,
+  formatCampaignContextForPrompt,
+  shouldCMOPlan,
+  suggestContentGaps,
+  needsCreativeDirection,
+  createCreativeDirectionTask,
+  needsMuseQA,
+} from '../../../../lib/orchestration'
 import { generateImage, autoPreset, extractVisualPrompt } from '../../../../lib/dalle'
 import { generateVideo, generateVideoFromText, buildVideoPrompt } from '../../../../lib/ltx'
 import { FRAMEWORK_BRIEF } from '../../../../lib/framework'
@@ -223,9 +234,11 @@ function priorityScore(task) {
   return score
 }
 
-async function autoAssignInboxTasks(tasks, agents, skillData) {
-  const inboxTasks = tasks.filter(t => t.status === 'Inbox')
-    .sort((a, b) => priorityScore(b) - priorityScore(a)) // High-priority first
+async function autoAssignInboxTasks(tasks, agents, skillData, activity) {
+  // Use Roundtable priority tiers (P1 > P2 > P3) with fallback to legacy scoring
+  const inboxTasks = activity
+    ? sortByPriorityTier(tasks.filter(t => t.status === 'Inbox'), activity)
+    : tasks.filter(t => t.status === 'Inbox').sort((a, b) => priorityScore(b) - priorityScore(a))
   const assigned = []
 
   for (const task of inboxTasks) {
@@ -326,7 +339,7 @@ async function triggerAutoReview() {
 
 // ---- AGGRESSIVE PLANNING ----
 
-async function triggerAggressivePlanning(tasks) {
+async function triggerAggressivePlanning(tasks, activity) {
   const now = new Date()
   const twoWeeksOut = new Date(now)
   twoWeeksOut.setDate(twoWeeksOut.getDate() + 14)
@@ -337,22 +350,39 @@ async function triggerAggressivePlanning(tasks) {
   const inboxOrAssigned = tasks.filter(t => t.status === 'Inbox' || t.status === 'Assigned')
   const reviewCount = tasks.filter(t => t.status === 'Review').length
 
+  // Roundtable v4.0: Use orchestration-level intelligence on whether CMO should plan
+  const orchestrationSaysPlan = shouldCMOPlan(tasks)
+
   // AGGRESSIVE: Plan if working pipeline has fewer than 15 tasks or fewer than 8 queued
-  // Review tasks are excluded — agents should keep creating while CHIEF reviews
-  if (workingTasks.length >= 15 && inboxOrAssigned.length >= 8) {
+  // OR if orchestration detects content gaps (CMO stays 2-3 briefs ahead)
+  if (!orchestrationSaysPlan && workingTasks.length >= 15 && inboxOrAssigned.length >= 8) {
     console.log(`[RUNNER] Pipeline healthy: ${workingTasks.length} working, ${inboxOrAssigned.length} queued, ${reviewCount} in review. Skipping plan.`)
     return null
   }
 
   try {
-    console.log(`[RUNNER] Pipeline needs fuel: ${workingTasks.length} working, ${inboxOrAssigned.length} queued, ${reviewCount} in review. Triggering CMO planner...`)
+    console.log(`[RUNNER] Pipeline needs fuel: ${workingTasks.length} working, ${inboxOrAssigned.length} queued, ${reviewCount} in review, orchestration=${orchestrationSaysPlan}. Triggering CMO planner...`)
+
+    // Roundtable v4.0: Inject content gap analysis into planning context
+    let gapContext = ''
+    if (activity) {
+      const gaps = suggestContentGaps(tasks, activity)
+      if (gaps.length > 0) {
+        gapContext = gaps.map(g => `${g.type}: ${g.gap} (${g.count} existing)`).join('; ')
+        console.log(`[RUNNER] Content gaps detected: ${gapContext}`)
+      }
+    }
+
     const baseUrl = process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : 'http://localhost:3000'
     const planRes = await fetch(`${baseUrl}/api/campaigns/plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ weeksAhead: 2 }), // Always plan 2 weeks ahead
+      body: JSON.stringify({
+        weeksAhead: 2, // Always plan 2 weeks ahead
+        contentGaps: gapContext || undefined,
+      }),
     })
     const planData = await planRes.json()
     if (planData.tasksCreated > 0) {
@@ -363,6 +393,42 @@ async function triggerAggressivePlanning(tasks) {
     console.warn('[RUNNER] Campaign planner failed:', planErr.message)
     return null
   }
+}
+
+// ---- MUSE CREATIVE DIRECTION AUTO-CREATION ----
+// Roundtable v4.0: Two-Stage Brief — After CMO plans strategy, MUSE adds creative direction
+
+async function autoCreateCreativeDirection(tasks, activity) {
+  const created = []
+  try {
+    const campaignNames = [...new Set(tasks.filter(t => t.campaign).map(t => t.campaign))]
+
+    for (const campaign of campaignNames) {
+      if (needsCreativeDirection(campaign, activity)) {
+        // Find the most recent CMO brief for this campaign
+        const cmoBriefs = activity.filter(a =>
+          a.agent === 'CMO' && a.task?.includes(campaign) &&
+          (a.action === 'completed' || a.action === 'generated')
+        )
+        const latestBrief = cmoBriefs[0]?.details || `Strategy brief for ${campaign}`
+
+        const taskFields = createCreativeDirectionTask(campaign, latestBrief)
+        await createTask(taskFields)
+        await addActivity({
+          'Agent': 'Council',
+          'Action': 'creative-direction-queued',
+          'Task': taskFields['Task Name'],
+          'Details': `Two-stage brief: MUSE creative direction auto-created for campaign "${campaign}"`,
+          'Type': 'Task Created',
+        })
+        created.push({ campaign, task: taskFields['Task Name'] })
+        console.log(`[RUNNER] 🎨 Created MUSE creative direction task for "${campaign}"`)
+      }
+    }
+  } catch (err) {
+    console.warn('[RUNNER] Creative direction auto-creation failed:', err.message)
+  }
+  return created
 }
 
 export const dynamic = 'force-dynamic'
@@ -393,10 +459,12 @@ export async function GET(request) {
   const results = { processed: [], skipped: [], errors: [], autoAssigned: [], reviewResults: null, planResults: null }
 
   try {
-    // 1. Fetch tasks and agents in parallel
-    const [tasks, agents] = await Promise.all([
+    // 1. Fetch tasks, agents, and activity history in parallel
+    // Activity is now top-level — used by priority tiers, campaign context, and planning
+    const [tasks, agents, activity] = await Promise.all([
       getTasks({ noCache: true }),
       getAgents({ noCache: true }),
+      getAllActivity().catch(() => []),
     ])
 
     // 2. AUTO-REVIEW FIRST: Clear the Review queue before doing anything else.
@@ -415,8 +483,8 @@ export async function GET(request) {
       }
     }
 
-    // 3. AGGRESSIVE AUTO-PLAN: Keep the pipeline full
-    const planData = await triggerAggressivePlanning(tasks)
+    // 3. AGGRESSIVE AUTO-PLAN: Keep the pipeline full (now with content gap intelligence)
+    const planData = await triggerAggressivePlanning(tasks, activity)
     results.planResults = planData
     if (planData?.tasksCreated > 0) {
       // Re-fetch tasks to pick up new ones
@@ -425,16 +493,25 @@ export async function GET(request) {
       tasks.push(...freshTasks)
     }
 
-    // 2b. BUILD SKILL DATA for intelligent routing (one-time per cycle)
+    // 3b. MUSE CREATIVE DIRECTION: Two-stage brief — auto-create MUSE tasks
+    // for campaigns where CMO has briefed strategy but MUSE hasn't added creative direction
+    const creativeDirectionTasks = await autoCreateCreativeDirection(tasks, activity)
+    if (creativeDirectionTasks.length > 0) {
+      results.creativeDirection = creativeDirectionTasks
+      // Re-fetch tasks to include newly created MUSE tasks
+      const freshTasks = await getTasks({ noCache: true })
+      tasks.length = 0
+      tasks.push(...freshTasks)
+    }
+
+    // 4. BUILD SKILL DATA for intelligent routing (one-time per cycle)
     let skillData = null
     try {
-      const { getAllActivity } = await import('../../../../lib/airtable')
-      const activity = await getAllActivity()
       skillData = buildSkillLookup(tasks, activity)
     } catch { /* Non-critical: routing falls back to load-only balancing */ }
 
-    // 3. AUTO-ASSIGN: Move Inbox tasks to Assigned (skill-aware)
-    const autoAssigned = await autoAssignInboxTasks(tasks, agents, skillData)
+    // 5. AUTO-ASSIGN: Move Inbox tasks to Assigned (skill-aware, priority-tiered)
+    const autoAssigned = await autoAssignInboxTasks(tasks, agents, skillData, activity)
     results.autoAssigned = autoAssigned
     if (autoAssigned.length > 0) {
       console.log(`[RUNNER] Auto-assigned ${autoAssigned.length} tasks`)
@@ -511,8 +588,10 @@ export async function GET(request) {
     // Default 8 tasks/cycle × 4 cycles/hour = 32/hour = 768/day theoretical max
     const url = new URL(request.url)
     const limit = parseInt(url.searchParams.get('limit') || '8', 10)
-    const allAssigned = tasks.filter(t => t.status === 'Assigned' && t.agent)
-      .sort((a, b) => priorityScore(b) - priorityScore(a)) // High-priority first
+    // Use Roundtable priority tiers for processing order (P1 revisions > P2 standard > P3 new briefs)
+    const allAssigned = activity
+      ? sortByPriorityTier(tasks.filter(t => t.status === 'Assigned' && t.agent), activity)
+      : tasks.filter(t => t.status === 'Assigned' && t.agent).sort((a, b) => priorityScore(b) - priorityScore(a))
     const assignedTasks = allAssigned.slice(0, limit)
 
     if (assignedTasks.length === 0 && autoAssigned.length === 0) {
@@ -589,7 +668,7 @@ export async function GET(request) {
       }
 
       const batchResults = await Promise.allSettled(
-        batch.map(({ task, agent }) => processTask(task, agent, memoryCache))
+        batch.map(({ task, agent }) => processTask(task, agent, memoryCache, activity))
       )
       taskResults.push(...batchResults.map((r, i) => ({ result: r, task: batch[i].task })))
     }
@@ -699,7 +778,7 @@ export async function GET(request) {
  * Process a single task — runs AI generation, saves output, logs activity.
  * Designed to be called concurrently via Promise.allSettled.
  */
-async function processTask(task, agent, memoryCache) {
+async function processTask(task, agent, memoryCache, activity) {
   console.log(`[RUNNER] Processing: "${task.name}" → ${agent.name} (${agent.model})`)
 
   // Check revision context
@@ -737,10 +816,23 @@ async function processTask(task, agent, memoryCache) {
     }
   }
 
-  // Build prompt with FRAMEWORK injection
+  // Roundtable v4.0: Campaign context injection — gives agents awareness of related tasks,
+  // handoffs, and campaign status so they can produce contextually coherent content
+  let campaignContext = ''
+  if (task.campaign && activity?.length > 0) {
+    try {
+      const campaignTasks = (await getTasksByCampaign(task.campaign, { noCache: true })).catch?.(() => []) || []
+      const ctx = buildCampaignContext(task.campaign, campaignTasks.length > 0 ? campaignTasks : [], activity)
+      campaignContext = formatCampaignContextForPrompt(ctx)
+    } catch (err) {
+      console.warn(`[RUNNER] Campaign context failed for "${task.campaign}":`, err.message)
+    }
+  }
+
+  // Build prompt with FRAMEWORK injection + campaign context
   const userPrompt = (isRevision
     ? buildRevisionPrompt(task, feedbackContext, previousOutput)
-    : buildTaskPrompt(task)) + memoryContext + figmaContext
+    : buildTaskPrompt(task)) + campaignContext + memoryContext + figmaContext
 
   let output
 
