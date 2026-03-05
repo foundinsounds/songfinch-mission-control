@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { MODEL_OPTIONS, MODEL_LEGACY_MAP } from '../lib/constants'
 import PixelAgents from './PixelAgents'
 import AgentPerformanceChart from './AgentPerformanceChart'
+import AgentOrgChart from './AgentOrgChart'
 
 function resolveModel(m) {
   const resolved = MODEL_LEGACY_MAP[m] || m || 'claude-sonnet-4-6'
@@ -186,6 +187,7 @@ export default function AnalyticsDashboard({ agents, tasks, activity, onConfigAg
     { key: 'quality', label: 'Quality & Pipeline', icon: '\u{2B50}' },
     { key: 'visuals', label: 'Visuals & Calendar', icon: '\u{1F3A8}' },
     { key: 'intelligence', label: 'Intelligence', icon: '\u{1F9E0}' },
+    { key: 'orgchart', label: 'Org Chart', icon: '\u{1F3D7}\uFE0F' },
     { key: 'office', label: 'Agent Office', icon: '\u{1F3E2}' },
   ]
 
@@ -1194,6 +1196,11 @@ export default function AnalyticsDashboard({ agents, tasks, activity, onConfigAg
             <p className="text-xs text-gray-600 text-center py-20">Failed to load intelligence data</p>
           )}
         </>
+      )}
+
+      {/* ══════════ ORG CHART TAB ══════════ */}
+      {tab === 'orgchart' && (
+        <AgentOrgChart agents={agents} tasks={tasks} onAgentClick={onConfigAgent} />
       )}
 
       {/* ══════════ AGENT OFFICE TAB ══════════ */}
