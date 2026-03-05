@@ -68,7 +68,7 @@ function getAgentWorkloads(tasks, agents) {
 
 const MAX_AGENT_QUEUE = 5 // Max queued tasks per agent before redistributing
 
-function findBestAgent(task, agents, allTasks) {
+function findBestAgent(task, agents, allTasks, skillData) {
   const workloads = allTasks ? getAgentWorkloads(allTasks, agents) : null
 
   // Primary: content-type routing
@@ -78,8 +78,8 @@ function findBestAgent(task, agents, allTasks) {
     if (agent) {
       // Check if primary agent is overloaded
       if (workloads && workloads[name]?.total >= MAX_AGENT_QUEUE) {
-        // Try to find a capable alternative with lower load
-        const alt = findAlternativeAgent(task, agents, workloads, name)
+        // Try to find a skill-aware capable alternative with lower load
+        const alt = findAlternativeAgent(task, agents, workloads, name, skillData)
         if (alt) {
           console.log(`[BALANCE] ${name} overloaded (${workloads[name].total} tasks), routing "${task.name}" to ${alt}`)
           return alt
@@ -97,7 +97,7 @@ function findBestAgent(task, agents, allTasks) {
         const agent = agents.find(a => a.name === route.agent)
         if (agent) {
           if (workloads && workloads[route.agent]?.total >= MAX_AGENT_QUEUE) {
-            const alt = findAlternativeAgent(task, agents, workloads, route.agent)
+            const alt = findAlternativeAgent(task, agents, workloads, route.agent, skillData)
             if (alt) return alt
           }
           return route.agent
@@ -109,30 +109,83 @@ function findBestAgent(task, agents, allTasks) {
   return 'MUSE'
 }
 
-function findAlternativeAgent(task, agents, workloads, excludeAgent) {
-  // Creative/generalist agents that can handle overflow
-  const generalists = ['MUSE', 'STORY', 'PULSE', 'HOOK']
+// Skill-aware alternative finder — prefers agents with proven quality
+// at the content type when redistributing overloaded work
+function findAlternativeAgent(task, agents, workloads, excludeAgent, skillData) {
+  // All creative agents can potentially handle overflow
+  const candidates = ['MUSE', 'STORY', 'PULSE', 'HOOK', 'FLOW', 'LENS', 'SCOUT']
 
-  // Find the least-loaded generalist
+  const ct = task.contentType || 'General'
   let bestAgent = null
-  let bestLoad = Infinity
+  let bestScore = -Infinity
 
-  for (const name of generalists) {
+  for (const name of candidates) {
     if (name === excludeAgent) continue
     const agent = agents.find(a => a.name === name)
     if (!agent) continue
     const load = workloads[name]?.total || 0
-    if (load < bestLoad) {
-      bestLoad = load
+    if (load >= MAX_AGENT_QUEUE) continue // Skip overloaded agents
+
+    // Composite score: lower load is better, proven skill is a bonus
+    let score = (MAX_AGENT_QUEUE - load) * 10 // Load factor (0-50)
+
+    // Skill bonus from historical specialization data
+    if (skillData?.[name]?.[ct]) {
+      const skill = skillData[name][ct]
+      score += (skill.avgScore || 0) * 5       // Quality bonus (0-25)
+      score += (skill.approvalRate || 0) / 10   // Approval rate bonus (0-10)
+      if (skill.reviews >= 3) score += 10       // Confidence bonus
+    }
+
+    if (score > bestScore) {
+      bestScore = score
       bestAgent = name
     }
   }
 
-  // Only redirect if the alternative has meaningfully less load
-  if (bestAgent && bestLoad < MAX_AGENT_QUEUE - 1) {
+  // Only redirect if alternative has meaningfully less load
+  if (bestAgent && (workloads[bestAgent]?.total || 0) < MAX_AGENT_QUEUE - 1) {
     return bestAgent
   }
-  return null // All agents are busy, stick with primary
+  return null
+}
+
+// Build lightweight skill lookup for routing decisions (cached per cycle)
+function buildSkillLookup(tasks, activity) {
+  const lookup = {} // { agentName: { contentType: { avgScore, approvalRate, reviews } } }
+
+  const scored = activity.filter(a =>
+    (a.action === 'approved' || a.action === 'revision requested') && a.details
+  )
+
+  scored.forEach(event => {
+    const task = tasks.find(t => t.name === event.task)
+    if (!task?.agent) return
+
+    const ct = task.contentType || 'General'
+    if (!lookup[task.agent]) lookup[task.agent] = {}
+    if (!lookup[task.agent][ct]) lookup[task.agent][ct] = { scores: [], approvals: 0, reviews: 0 }
+
+    const entry = lookup[task.agent][ct]
+    entry.reviews++
+    if (event.action === 'approved') entry.approvals++
+
+    const match = event.details.match(/\((\d+\.?\d*)\/5\)/)
+    if (match) entry.scores.push(parseFloat(match[1]))
+  })
+
+  // Compute averages
+  Object.values(lookup).forEach(agentData => {
+    Object.values(agentData).forEach(entry => {
+      entry.avgScore = entry.scores.length > 0
+        ? Math.round((entry.scores.reduce((a, b) => a + b, 0) / entry.scores.length) * 10) / 10
+        : null
+      entry.approvalRate = entry.reviews > 0 ? Math.round((entry.approvals / entry.reviews) * 100) : null
+      delete entry.scores
+    })
+  })
+
+  return lookup
 }
 
 // Smart priority scoring — determines processing order for the pipeline
@@ -170,13 +223,13 @@ function priorityScore(task) {
   return score
 }
 
-async function autoAssignInboxTasks(tasks, agents) {
+async function autoAssignInboxTasks(tasks, agents, skillData) {
   const inboxTasks = tasks.filter(t => t.status === 'Inbox')
     .sort((a, b) => priorityScore(b) - priorityScore(a)) // High-priority first
   const assigned = []
 
   for (const task of inboxTasks) {
-    const agentName = task.agent || findBestAgent(task, agents, tasks)
+    const agentName = task.agent || findBestAgent(task, agents, tasks, skillData)
     try {
       await updateTask(task.id, { 'Status': 'Assigned', 'Agent': agentName })
       await addActivity({
@@ -372,8 +425,16 @@ export async function GET(request) {
       tasks.push(...freshTasks)
     }
 
-    // 3. AUTO-ASSIGN: Move Inbox tasks to Assigned
-    const autoAssigned = await autoAssignInboxTasks(tasks, agents)
+    // 2b. BUILD SKILL DATA for intelligent routing (one-time per cycle)
+    let skillData = null
+    try {
+      const { getAllActivity } = await import('../../../../lib/airtable')
+      const activity = await getAllActivity()
+      skillData = buildSkillLookup(tasks, activity)
+    } catch { /* Non-critical: routing falls back to load-only balancing */ }
+
+    // 3. AUTO-ASSIGN: Move Inbox tasks to Assigned (skill-aware)
+    const autoAssigned = await autoAssignInboxTasks(tasks, agents, skillData)
     results.autoAssigned = autoAssigned
     if (autoAssigned.length > 0) {
       console.log(`[RUNNER] Auto-assigned ${autoAssigned.length} tasks`)
@@ -425,7 +486,7 @@ export async function GET(request) {
 
     const recycled = []
     for (const task of staleCandidates.slice(0, 5)) { // Cap at 5 per cycle
-      const newAgent = findBestAgent(task, agents, tasks)
+      const newAgent = findBestAgent(task, agents, tasks, skillData)
       if (newAgent && newAgent !== task.agent) {
         const oldAgent = task.agent
         await updateTask(task.id, { 'Agent': newAgent, 'Status': 'Assigned' }).catch(() => {})

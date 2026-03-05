@@ -205,8 +205,13 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onC
                       )}
                       <span className="text-[9px] text-gray-600 ml-0.5">{taskBreakdown.total}</span>
                     </div>
+                  ) : outputStats.done > 0 ? (
+                    <span className="text-[9px] text-green-500/50 flex items-center gap-0.5">
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
+                      all clear
+                    </span>
                   ) : (
-                    <span className="text-[9px] text-gray-600 italic">idle</span>
+                    <span className="text-[9px] text-gray-600">standby</span>
                   )}
                 </div>
               </button>
