@@ -22,8 +22,12 @@ function readingTime(text) {
 
 function extractImageUrls(text) {
   if (!text) return []
-  const urlRegex = /https?:\/\/[^\s"'<>]+\.(?:png|jpg|jpeg|gif|webp|svg)(?:\?[^\s"'<>]*)?/gi
-  return [...new Set(text.match(urlRegex) || [])]
+  // Match both http URLs and base64 data URLs (from FLUX.1 / Gemini image gen)
+  const httpRegex = /https?:\/\/[^\s"'<>]+\.(?:png|jpg|jpeg|gif|webp|svg)(?:\?[^\s"'<>]*)?/gi
+  const dataUrlRegex = /data:image\/[a-z]+;base64,[A-Za-z0-9+/=]+/g
+  const httpUrls = text.match(httpRegex) || []
+  const dataUrls = text.match(dataUrlRegex) || []
+  return [...new Set([...httpUrls, ...dataUrls])]
 }
 
 // ─── Inline Markdown Renderer ────────────────────────────
