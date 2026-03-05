@@ -16,7 +16,7 @@ import {
   createCreativeDirectionTask,
   needsMuseQA,
 } from '../../../../lib/orchestration'
-import { generateImage, autoPreset, extractVisualPrompt } from '../../../../lib/dalle'
+import { generateImage, autoPreset, extractVisualPrompt } from '../../../../lib/gemini-image'
 import { generateVideo, generateVideoFromText, buildVideoPrompt } from '../../../../lib/ltx'
 import { FRAMEWORK_BRIEF } from '../../../../lib/framework'
 import { buildDesignContext, isFigmaConfigured } from '../../../../lib/figma'
@@ -866,14 +866,14 @@ async function processTask(task, agent, memoryCache, activity) {
 
   let output
 
-  // IMAGE TASKS: Route to DALL-E 3 instead of text AI
-  if (task.contentType === 'Image' && process.env.OPENAI_API_KEY) {
+  // IMAGE TASKS: Route to Gemini/Nano Banana image generation
+  if (task.contentType === 'Image' && process.env.GOOGLE_AI_KEY) {
     const territory = task.description?.match(/Territory:\s*(Celebration|Gratitude|Memory|Identity|Tribute)/i)?.[1]
     const platform = Array.isArray(task.platform) ? task.platform[0] : task.platform
     const preset = autoPreset(task.contentType, platform)
     const imagePrompt = extractVisualPrompt(task.name, task.description, territory)
 
-    console.log(`[RUNNER] 🎨 Image task: "${task.name}" → DALL-E 3 (${preset})`)
+    console.log(`[RUNNER] 🎨 Image task: "${task.name}" → Gemini/Nano Banana (${preset})`)
 
     const imageResult = await generateImage({
       prompt: imagePrompt,
