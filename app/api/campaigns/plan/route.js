@@ -22,6 +22,7 @@ const CONTENT_MIX = [
   { type: 'Image', frequency: 3, platforms: ['Instagram', 'Facebook', 'TikTok'] },
   { type: 'Landing Page', frequency: 1, platforms: ['Blog'] },
   { type: 'Strategy', frequency: 1, platforms: ['Email'] },
+  { type: 'Research', frequency: 1, platforms: ['Blog'] },
 ]
 
 // Planning thresholds — keep the pipeline FULL
@@ -389,7 +390,7 @@ You MUST respond with ONLY a raw JSON array — no markdown, no code fences, no 
 Each object:
 {"name":"Evocative task name","description":"Rich creative brief with emotional territory, human insight, and direction","contentType":"Social Post","scheduledDate":"YYYY-MM-DD","platform":"Instagram","territory":"Celebration","insight":"The biggest moments deserve more than a card","priority":"Medium","variant":null}
 
-Valid contentType: Social Post, Ad Copy, Blog Post, Video Script, Image, Landing Page, Strategy
+Valid contentType: Social Post, Ad Copy, Blog Post, Video Script, Image, Landing Page, Strategy, Research
 Valid platform: ${platforms.join(', ')}
 Valid territory: Celebration, Gratitude, Memory, Identity, Tribute
 Valid priority: High, Medium, Low
@@ -425,7 +426,7 @@ function parsePlan(output) {
     }
 
     // Validate and clean each task
-    const validTypes = new Set(['Ad Copy', 'Social Post', 'Video Script', 'Blog Post', 'Landing Page', 'Strategy', 'Image', 'General'])
+    const validTypes = new Set(['Ad Copy', 'Social Post', 'Video Script', 'Blog Post', 'Landing Page', 'Strategy', 'Image', 'Research', 'General'])
     const validTerritories = new Set(['Celebration', 'Gratitude', 'Memory', 'Identity', 'Tribute'])
 
     const result = tasks
