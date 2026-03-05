@@ -38,7 +38,7 @@ const AGENT_ROUTING = {
   'research': 'SCOUT', 'Research': 'SCOUT',
   'report': 'CHIEF', 'Report': 'CHIEF',
   'design': 'PIXEL', 'Design': 'PIXEL',
-  'image': 'PIXEL', 'Image': 'PIXEL',
+  'image': 'LENS', 'Image': 'LENS',
   'video': 'LENS', 'Video': 'LENS',
   'artist_spotlight': 'STORY', 'Artist Spotlight': 'STORY',
   'General': 'MUSE',
@@ -647,8 +647,14 @@ export async function GET(request) {
     )
 
     // 8. Mark all tasks "In Progress" first (batch status update)
+    // Cap per cycle to avoid Vercel function timeout (300s max)
+    const MAX_TASKS_PER_CYCLE = 8
     const validTasks = []
     for (const task of assignedTasks) {
+      if (validTasks.length >= MAX_TASKS_PER_CYCLE) {
+        results.skipped.push({ task: task.name, reason: `Cycle cap reached (${MAX_TASKS_PER_CYCLE})` })
+        continue
+      }
       const agent = agents.find(a => a.name === task.agent)
       if (!agent) {
         results.skipped.push({ task: task.name, reason: `Agent "${task.agent}" not found` })
