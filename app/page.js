@@ -49,6 +49,13 @@ import Breadcrumb from '../components/Breadcrumb'
 import PipelineStatusBadge from '../components/PipelineStatusBadge'
 import FaviconBadge from '../components/FaviconBadge'
 import AgentMetrics from '../components/AgentMetrics'
+import AgentComparison from '../components/AgentComparison'
+import ContentCalendarHeatmap from '../components/ContentCalendarHeatmap'
+import QuickCreateBar from '../components/QuickCreateBar'
+import AgentTimeline from '../components/AgentTimeline'
+import TaskContextMenu from '../components/TaskContextMenu'
+import FocusMode from '../components/FocusMode'
+import ProductivityScore from '../components/ProductivityScore'
 import { useURLState } from '../lib/useURLState'
 import { playApproveSound, playCompleteSound, playErrorSound, playCreateSound, playDropSound, playStatusChangeSound } from '../lib/sounds'
 import { checkEscalations } from '../lib/escalation'
@@ -80,6 +87,12 @@ export default function Roundtable() {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showBatchCreate, setShowBatchCreate] = useState(false)
   const [showMetrics, setShowMetrics] = useState(false)
+  const [showComparison, setShowComparison] = useState(false)
+  const [showCalendarHeatmap, setShowCalendarHeatmap] = useState(false)
+  const [showQuickCreate, setShowQuickCreate] = useState(false)
+  const [showTimeline, setShowTimeline] = useState(false)
+  const [focusModeActive, setFocusModeActive] = useState(false)
+  const [contextMenu, setContextMenu] = useState(null) // { x, y, task }
   const [focusedTaskId, setFocusedTaskId] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [quickFilters, setQuickFilters] = useState({ priorities: [], agents: [], contentTypes: [], statuses: [] })
@@ -481,6 +494,31 @@ export default function Roundtable() {
         setShowMetrics(s => !s)
         showToast('⌨ M → Agent metrics', 'info')
       }
+      if (e.key === 'c' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        setShowComparison(s => !s)
+        showToast('⌨ C → Agent comparison', 'info')
+      }
+      if (e.key === 'g' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        setShowCalendarHeatmap(s => !s)
+        showToast('⌨ G → Content calendar heatmap', 'info')
+      }
+      if (e.key === 'n' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        setShowQuickCreate(s => !s)
+        showToast('⌨ N → Quick create', 'info')
+      }
+      if (e.key === 'y' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        setShowTimeline(s => !s)
+        showToast('⌨ Y → Agent timeline', 'info')
+      }
+      if (e.key === 'F' && !e.metaKey && !e.ctrlKey && e.shiftKey) {
+        e.preventDefault()
+        setFocusModeActive(s => !s)
+        showToast('⌨ Shift+F → Focus mode', 'info')
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -695,20 +733,56 @@ export default function Roundtable() {
       result = result.filter(t => t.status && statuses.includes(t.status))
     }
 
-    // Apply search query on top
+    // Fuzzy search — token-based scoring with typo tolerance
     if (searchQuery && searchQuery.trim().length > 0) {
-      const q = searchQuery.toLowerCase().trim()
-      result = result.filter(t =>
-        (t.name && t.name.toLowerCase().includes(q)) ||
-        (t.description && t.description.toLowerCase().includes(q)) ||
-        (t.agent && t.agent.toLowerCase().includes(q)) ||
-        (t.status && t.status.toLowerCase().includes(q)) ||
-        (t.priority && t.priority.toLowerCase().includes(q)) ||
-        (t.contentType && t.contentType.toLowerCase().includes(q)) ||
-        (t.campaign && t.campaign.toLowerCase().includes(q)) ||
-        (t.platform && t.platform.toLowerCase().includes(q)) ||
-        (t.tags && t.tags.some(tag => tag.toLowerCase().includes(q)))
-      )
+      const rawQ = searchQuery.trim().toLowerCase()
+      const tokens = rawQ.split(/\s+/).filter(Boolean)
+
+      // Character-sequence fuzzy match: do all chars of pattern appear in order in str?
+      const fuzzyMatch = (str, pattern) => {
+        let si = 0, pi = 0
+        while (si < str.length && pi < pattern.length) {
+          if (str[si] === pattern[pi]) pi++
+          si++
+        }
+        return pi === pattern.length
+      }
+
+      // Score a single token against a single field value (0 = no match)
+      const scoreToken = (field, token) => {
+        if (!field) return 0
+        const f = field.toLowerCase()
+        if (f === token) return 100          // exact field match
+        if (f.startsWith(token)) return 80   // starts with
+        if (f.includes(token)) return 60     // substring
+        if (token.length >= 2 && fuzzyMatch(f, token)) return 30 // fuzzy sequence
+        return 0
+      }
+
+      // Score a task: sum of best-field scores per token
+      const scoreTask = (t) => {
+        const fields = [
+          t.name, t.description, t.agent, t.status,
+          t.priority, t.contentType, t.campaign, t.platform,
+          ...(t.tags || [])
+        ]
+        let total = 0
+        for (const token of tokens) {
+          let best = 0
+          for (const f of fields) {
+            const s = scoreToken(f, token)
+            if (s > best) best = s
+          }
+          if (best === 0) return 0 // all tokens must match something
+          total += best
+        }
+        return total
+      }
+
+      const scored = result.map(t => ({ task: t, score: scoreTask(t) }))
+        .filter(s => s.score > 0)
+        .sort((a, b) => b.score - a.score)
+      result = scored.map(s => s.task)
     }
 
     return result
@@ -771,10 +845,16 @@ export default function Roundtable() {
         planningCampaign={planningCampaign}
         onOpenSettings={() => setShowSettings(true)}
         onOpenMetrics={() => setShowMetrics(true)}
+        onOpenComparison={() => setShowComparison(true)}
+        onOpenCalendarHeatmap={() => setShowCalendarHeatmap(true)}
+        onOpenTimeline={() => setShowTimeline(true)}
+        onToggleFocusMode={() => setFocusModeActive(s => !s)}
+        focusModeActive={focusModeActive}
         onToggleSidebar={() => setMobileSidebar(s => !s)}
         onToggleFeed={() => setMobileFeed(f => !f)}
         notificationSlot={<NotificationCenter tasks={tasks} activity={activity} />}
         pipelineSlot={<PipelineStatusBadge />}
+        productivitySlot={<ProductivityScore tasks={tasks} activity={activity} />}
       />
 
       {/* Main Content */}
@@ -811,6 +891,15 @@ export default function Roundtable() {
 
           {/* View Switcher — Primary tabs + More dropdown */}
           <ViewSwitcher currentView={currentView} onViewChange={setCurrentView} inReview={stats.inReview} inboxCount={tasks.filter(t => t.status !== 'Done' && t.status !== 'Archived').length} />
+
+          {/* Quick Create Bar — inline keyboard-driven task creation */}
+          <QuickCreateBar
+            isOpen={showQuickCreate}
+            onClose={() => setShowQuickCreate(false)}
+            onCreateTask={handleCreateTask}
+            agents={agents}
+            existingTasks={tasks}
+          />
 
           {/* Global Search Bar */}
           {(currentView === 'kanban' || currentView === 'list') && (
@@ -854,6 +943,11 @@ export default function Roundtable() {
                   loading={dataSource === 'loading'}
                   onCreateTask={handleCreateTask}
                   searchQuery={searchQuery}
+                  onReorderTasks={(columnStatus, reorderedIds) => {
+                    // Reorder is managed internally by KanbanBoard via localStorage.
+                    // This callback allows parent to sync order to an external store if needed.
+                  }}
+                  onTaskContextMenu={(e, task) => setContextMenu({ x: e.clientX, y: e.clientY, task })}
                 />
               )
             )}
@@ -1148,6 +1242,37 @@ export default function Roundtable() {
       <KeyboardShortcutModal isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
       <BatchCreateModal isOpen={showBatchCreate} onClose={() => setShowBatchCreate(false)} onCreateTask={handleCreateTask} />
       {showMetrics && <AgentMetrics tasks={tasks} agents={agents} activity={activity} onClose={() => setShowMetrics(false)} />}
+      {showComparison && <AgentComparison agents={agents} tasks={tasks} onClose={() => setShowComparison(false)} />}
+      {showCalendarHeatmap && <ContentCalendarHeatmap activity={activity} tasks={tasks} onClose={() => setShowCalendarHeatmap(false)} />}
+      {showTimeline && <AgentTimeline activity={activity} agents={agents} onClose={() => setShowTimeline(false)} />}
+
+      {/* Focus Mode Overlay */}
+      <FocusMode isActive={focusModeActive} onToggle={() => setFocusModeActive(s => !s)} />
+
+      {/* Right-click Context Menu */}
+      {contextMenu && (
+        <TaskContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          task={contextMenu.task}
+          agents={agents}
+          onClose={() => setContextMenu(null)}
+          onUpdateStatus={(taskId, status) => {
+            handleUpdateTaskStatus(taskId, status)
+            setContextMenu(null)
+          }}
+          onAssignAgent={(taskId, agentName) => {
+            setTasks(prev => prev.map(t => t.id === taskId ? { ...t, agent: agentName, status: agentName ? 'Assigned' : t.status } : t))
+            showToast(`Assigned to ${agentName}`, 'info')
+            setContextMenu(null)
+          }}
+          onChangePriority={(taskId, priority) => {
+            setTasks(prev => prev.map(t => t.id === taskId ? { ...t, priority } : t))
+            showToast(`Priority → ${priority}`, 'info')
+            setContextMenu(null)
+          }}
+        />
+      )}
 
       {/* Task Detail Modal */}
       {selectedTask && (

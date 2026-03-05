@@ -47,7 +47,11 @@ const SHORTCUT_GROUPS = [
       { keys: ['D'], description: 'Mark task as Done' },
       { keys: ['B'], description: 'Batch create from CSV' },
       { keys: ['M'], description: 'Agent metrics panel' },
+      { keys: ['C'], description: 'Agent comparison view' },
+      { keys: ['G'], description: 'Content calendar heatmap' },
+      { keys: ['Y'], description: 'Agent timeline' },
       { keys: ['T'], description: 'Toggle theme' },
+      { keys: ['⇧', 'F'], description: 'Toggle focus mode' },
     ],
   },
   {

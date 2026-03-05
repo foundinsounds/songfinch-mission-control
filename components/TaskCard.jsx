@@ -38,6 +38,79 @@ function getAgeBadge(dateStr) {
 }
 
 /**
+ * useRelativeTime — Custom hook that returns a live-updating human-readable relative time.
+ * Formats: "just now" (<1min), "Xm ago" (minutes), "Xh ago" (hours), "Xd ago" (days), "Xw ago" (weeks)
+ * Updates every 60 seconds via setInterval.
+ */
+function useRelativeTime(dateStr) {
+  const computeRelative = useCallback(() => {
+    if (!dateStr) return null
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return null
+    const diff = Date.now() - date.getTime()
+    if (diff < 0) return 'just now'
+    const seconds = Math.floor(diff / 1000)
+    if (seconds < 60) return 'just now'
+    const minutes = Math.floor(diff / 60000)
+    if (minutes < 60) return `${minutes}m ago`
+    const hours = Math.floor(diff / 3600000)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(diff / 86400000)
+    if (days < 7) return `${days}d ago`
+    const weeks = Math.floor(days / 7)
+    return `${weeks}w ago`
+  }, [dateStr])
+
+  const [relative, setRelative] = useState(computeRelative)
+
+  useEffect(() => {
+    if (!dateStr) return
+    setRelative(computeRelative())
+    const interval = setInterval(() => {
+      setRelative(computeRelative())
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [dateStr, computeRelative])
+
+  return relative
+}
+
+/**
+ * getAgeDotColor — Returns a Tailwind bg class for the age indicator dot (full density only).
+ * Green: <1h, Yellow: 1-24h, Orange: 1-3d, Red: >3d
+ */
+function getAgeDotColor(dateStr) {
+  if (!dateStr) return null
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return null
+  const diff = Date.now() - date.getTime()
+  const hours = diff / 3600000
+  if (hours < 1) return 'bg-green-500'
+  if (hours < 24) return 'bg-yellow-400'
+  const days = hours / 24
+  if (days < 3) return 'bg-orange-400'
+  return 'bg-red-500'
+}
+
+/**
+ * formatExactDate — Returns a human-readable exact date/time string for tooltip display.
+ */
+function formatExactDate(dateStr) {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return ''
+  return date.toLocaleString('en-US', {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+}
+
+/**
  * HighlightText — Wraps text and highlights matching search terms
  * Uses case-insensitive matching with an orange highlight background
  */
@@ -56,8 +129,29 @@ function HighlightText({ text, query }) {
 
 const PRIORITY_STYLES = {
   High: 'border-l-red-500 border-red-500/30',
-  Medium: 'border-l-yellow-500 border-amber-500/20',
-  Low: 'border-l-gray-500 border-gray-500/20',
+  Medium: 'border-l-orange-500 border-orange-500/20',
+  Low: 'border-l-blue-500 border-blue-500/20',
+}
+
+// Background tint classes per priority level — very subtle to avoid overwhelming the dark theme
+const PRIORITY_BG_TINT = {
+  High: 'bg-red-500/[0.03]',
+  Medium: 'bg-orange-500/[0.03]',
+  Low: 'bg-blue-500/[0.03]',
+}
+
+// Priority dot colors — 6px colored circle indicator beside task names
+const PRIORITY_DOT_COLOR = {
+  High: 'bg-red-500',
+  Medium: 'bg-orange-500',
+  Low: 'bg-blue-500',
+}
+
+// Priority dot ring glow for High — adds a subtle outer ring
+const PRIORITY_DOT_RING = {
+  High: 'ring-2 ring-red-500/20',
+  Medium: '',
+  Low: '',
 }
 
 const CONTENT_TYPE_COLORS = {
@@ -297,7 +391,7 @@ const DENSITY_CONFIG = {
   },
 }
 
-export default function TaskCard({ task, onClick, onQuickApprove, onRequestChanges, onRetry, compact, density = 'comfortable', isSelected, onToggleSelect, allTasks = [], isFocused, searchQuery = '', animationIndex = 0 }) {
+export default function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChanges, onRetry, compact, density = 'comfortable', isSelected, onToggleSelect, allTasks = [], isFocused, searchQuery = '', animationIndex = 0 }) {
   const agent = task.agent ? AGENTS.find(a => a.name === task.agent) : null
   const isDone = task.status === 'Done'
   const isReview = task.status === 'Review'
@@ -325,6 +419,11 @@ export default function TaskCard({ task, onClick, onQuickApprove, onRequestChang
   // Staggered entrance delay
   const entranceDelay = Math.min(animationIndex * 40, 300)
 
+  // Relative time display — live-updating via useRelativeTime hook
+  const relativeTime = useRelativeTime(task.createdAt || task.created)
+  const exactDateTooltip = formatExactDate(task.createdAt || task.created)
+  const ageDotColor = getAgeDotColor(task.createdAt || task.created)
+
   // Hover preview state
   const [showPreview, setShowPreview] = useState(false)
   const hoverTimer = useRef(null)
@@ -345,11 +444,12 @@ export default function TaskCard({ task, onClick, onQuickApprove, onRequestChang
       <div
         ref={cardRef}
         onClick={onClick}
+        onContextMenu={onContextMenu}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className={`relative group flex items-center gap-1.5 px-2 py-1 rounded-md border border-dark-500/70 border-l-2 ${PRIORITY_STYLES[task.priority] || 'border-l-gray-600'} compact-card-hover cursor-pointer ${
-          isSelected ? 'bg-accent-orange/10 border-accent-orange/30' : 'bg-dark-700/80 hover:bg-dark-600'
-        } ${isDone ? 'opacity-70' : ''} ${isFocused ? 'ring-2 ring-accent-blue/60 bg-accent-blue/5' : ''} animate-card-enter-compact`}
+        className={`relative group flex items-center gap-1.5 px-2 py-1 rounded-md border border-dark-500/70 border-l-[4px] ${PRIORITY_STYLES[task.priority] || 'border-l-gray-600'} compact-card-hover cursor-pointer ${
+          isSelected ? 'bg-accent-orange/10 border-accent-orange/30' : `${PRIORITY_BG_TINT[task.priority] || 'bg-dark-700/80'} hover:bg-dark-600`
+        } ${isDone ? 'opacity-70' : ''} ${isFocused ? 'ring-2 ring-accent-blue/60 bg-accent-blue/5' : ''} ${isHighPriority ? 'priority-pulse-high' : ''} animate-card-enter-compact`}
         style={{ animationDelay: `${entranceDelay}ms`, animationFillMode: 'backwards' }}
       >
         {/* Status dot */}
@@ -372,13 +472,20 @@ export default function TaskCard({ task, onClick, onQuickApprove, onRequestChang
         )}
 
         {/* Priority dot */}
-        {task.priority === 'High' && (
-          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-red-500" title="High priority" />
+        {task.priority && PRIORITY_DOT_COLOR[task.priority] && (
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${PRIORITY_DOT_COLOR[task.priority]} ${PRIORITY_DOT_RING[task.priority] || ''}`} title={`${task.priority} priority`} />
         )}
 
         {/* Done check */}
         {isDone && (
           <span className="text-accent-green text-[10px]"><CheckIcon /></span>
+        )}
+
+        {/* Relative time stamp */}
+        {relativeTime && (
+          <span className="text-[8px] text-gray-600 font-mono tabular-nums shrink-0" title={exactDateTooltip}>
+            {relativeTime}
+          </span>
         )}
 
         {/* Hover preview tooltip */}
@@ -393,11 +500,12 @@ export default function TaskCard({ task, onClick, onQuickApprove, onRequestChang
       <div
         ref={cardRef}
         onClick={onClick}
+        onContextMenu={onContextMenu}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className={`relative group flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-dark-500 border-l-[3px] ${PRIORITY_STYLES[task.priority] || 'border-l-gray-600'} compact-card-hover cursor-pointer ${
-          isSelected ? 'bg-accent-orange/10 border-accent-orange/30' : 'bg-dark-700 hover:bg-dark-600'
-        } ${isDone ? 'opacity-75' : ''} ${isFocused ? 'ring-2 ring-accent-blue/60 bg-accent-blue/5' : ''} animate-card-enter-compact`}
+        className={`relative group flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-dark-500 border-l-[4px] ${PRIORITY_STYLES[task.priority] || 'border-l-gray-600'} compact-card-hover cursor-pointer ${
+          isSelected ? 'bg-accent-orange/10 border-accent-orange/30' : `${PRIORITY_BG_TINT[task.priority] || 'bg-dark-700'} hover:bg-dark-600`
+        } ${isDone ? 'opacity-75' : ''} ${isFocused ? 'ring-2 ring-accent-blue/60 bg-accent-blue/5' : ''} ${isHighPriority ? 'priority-pulse-high' : ''} animate-card-enter-compact`}
         style={{ animationDelay: `${entranceDelay}ms`, animationFillMode: 'backwards' }}
       >
         {/* Select checkbox */}
@@ -457,13 +565,18 @@ export default function TaskCard({ task, onClick, onQuickApprove, onRequestChang
         })()}
 
         {/* Priority dot */}
-        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-          task.priority === 'High' ? 'bg-red-500' : task.priority === 'Medium' ? 'bg-yellow-500' : 'bg-gray-600'
-        }`} />
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${PRIORITY_DOT_COLOR[task.priority] || 'bg-gray-600'} ${PRIORITY_DOT_RING[task.priority] || ''}`} title={task.priority ? `${task.priority} priority` : undefined} />
 
         {/* Done check */}
         {isDone && (
           <span className="text-accent-green text-[10px]"><CheckIcon /></span>
+        )}
+
+        {/* Relative time stamp */}
+        {relativeTime && (
+          <span className="text-[8px] text-gray-600 font-mono tabular-nums shrink-0" title={exactDateTooltip}>
+            {relativeTime}
+          </span>
         )}
 
         {/* Hover preview tooltip for compact cards */}
@@ -476,9 +589,10 @@ export default function TaskCard({ task, onClick, onQuickApprove, onRequestChang
     <div
       ref={cardRef}
       onClick={onClick}
+      onContextMenu={onContextMenu}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`group task-card ${statusHoverClass} bg-dark-700 rounded-lg border border-dark-500 border-l-[3px] ${PRIORITY_STYLES[task.priority] || 'border-l-gray-600'} p-3 relative ${isDone ? 'opacity-85' : ''} ${isSelected ? 'ring-1 ring-accent-orange/40 bg-accent-orange/5' : ''} ${isFocused ? 'ring-2 ring-accent-blue/60 bg-accent-blue/5 shadow-lg shadow-accent-blue/10' : ''} ${isHighPriority ? 'priority-pulse-high' : ''} animate-card-enter`}
+      className={`group task-card ${statusHoverClass} ${PRIORITY_BG_TINT[task.priority] || 'bg-dark-700'} rounded-lg border border-dark-500 border-l-[4px] ${PRIORITY_STYLES[task.priority] || 'border-l-gray-600'} p-3 relative ${isDone ? 'opacity-85' : ''} ${isSelected ? 'ring-1 ring-accent-orange/40 bg-accent-orange/5' : ''} ${isFocused ? 'ring-2 ring-accent-blue/60 bg-accent-blue/5 shadow-lg shadow-accent-blue/10' : ''} ${isHighPriority ? 'priority-pulse-high' : ''} animate-card-enter`}
       style={{ animationDelay: `${entranceDelay}ms`, animationFillMode: 'backwards' }}
     >
       {/* Hover Preview Popover */}
@@ -537,9 +651,17 @@ export default function TaskCard({ task, onClick, onQuickApprove, onRequestChang
         {allTasks.length > 0 && <DependencyChainBadge task={task} allTasks={allTasks} />}
       </div>
 
-      {/* Task Name */}
-      <h3 className={`text-[13px] font-semibold leading-tight mb-1.5 ${isDone ? 'text-gray-400' : 'text-gray-100'}`}>
-        <HighlightText text={task.name} query={searchQuery} />
+      {/* Task Name with priority dot */}
+      <h3 className={`text-[13px] font-semibold leading-tight mb-1.5 flex items-center gap-1.5 ${isDone ? 'text-gray-400' : 'text-gray-100'}`}>
+        {task.priority && PRIORITY_DOT_COLOR[task.priority] && (
+          <span
+            className={`w-[6px] h-[6px] rounded-full shrink-0 ${PRIORITY_DOT_COLOR[task.priority]} ${PRIORITY_DOT_RING[task.priority] || ''}`}
+            title={`${task.priority} priority`}
+          />
+        )}
+        <span className="truncate">
+          <HighlightText text={task.name} query={searchQuery} />
+        </span>
       </h3>
 
       {/* Description Preview */}
@@ -621,6 +743,15 @@ export default function TaskCard({ task, onClick, onQuickApprove, onRequestChang
             )
           })()}
           <TaskTimeInline task={task} />
+          {/* Relative time with age dot (full density) */}
+          {relativeTime && (
+            <span className="flex items-center gap-1 text-[8px] text-gray-600 font-mono tabular-nums shrink-0" title={exactDateTooltip}>
+              {ageDotColor && (
+                <span className={`w-1.5 h-1.5 rounded-full ${ageDotColor} shrink-0`} />
+              )}
+              {relativeTime}
+            </span>
+          )}
         </div>
       </div>
 

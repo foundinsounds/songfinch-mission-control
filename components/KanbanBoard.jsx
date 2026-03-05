@@ -353,7 +353,7 @@ function InlineQuickAdd({ columnStatus, onCreateTask }) {
   )
 }
 
-export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickApprove, onRequestChanges, onRetry, onStatusChange, selectedAgent, onNewTask, isTaskSelected, onToggleTaskSelect, allTasks = [], focusedTaskId, loading = false, onCreateTask, searchQuery = '' }) {
+export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickApprove, onRequestChanges, onRetry, onStatusChange, selectedAgent, onNewTask, isTaskSelected, onToggleTaskSelect, allTasks = [], focusedTaskId, loading = false, onCreateTask, searchQuery = '', onReorderTasks, onTaskContextMenu }) {
   const [agentFilter, setAgentFilter] = useState(selectedAgent || null)
   const [sortByPriority, setSortByPriority] = useState(false)
   const [density, setDensity] = useState(() => {
@@ -370,6 +370,7 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
     return false
   })
   const [draggedTaskId, setDraggedTaskId] = useState(null)
+  const [draggedTaskSourceCol, setDraggedTaskSourceCol] = useState(null)
   const [dragOverColumn, setDragOverColumn] = useState(null)
   const [dragOverCardIndex, setDragOverCardIndex] = useState(null)
   const [dragOverCardColumn, setDragOverCardColumn] = useState(null)
@@ -560,6 +561,7 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
   // Drag-and-drop handlers
   const handleDragStart = useCallback((e, task) => {
     setDraggedTaskId(task.id)
+    setDraggedTaskSourceCol(task.status)
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', task.id)
     e.dataTransfer.setData('application/x-source-column', task.status)
@@ -570,6 +572,7 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
 
   const handleDragEnd = useCallback((e) => {
     setDraggedTaskId(null)
+    setDraggedTaskSourceCol(null)
     setDragOverColumn(null)
     setDragOverCardIndex(null)
     setDragOverCardColumn(null)
@@ -584,6 +587,8 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
 
   const handleDragLeave = useCallback(() => {
     setDragOverColumn(null)
+    setDragOverCardIndex(null)
+    setDragOverCardColumn(null)
   }, [])
 
   // Card-level drag over for intra-column reorder
@@ -632,6 +637,11 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
 
       playDropSound()
       saveCustomOrder({ ...customOrder, [columnKey]: orderedIds })
+
+      // Notify parent of reorder
+      if (onReorderTasks) {
+        onReorderTasks(columnKey, orderedIds)
+      }
       return
     }
 
@@ -643,7 +653,7 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
       const targetCount = tasks.filter(t => t.status === columnKey).length + 1
       fireWipToast(columnKey, targetCount)
     }
-  }, [tasks, onStatusChange, dragOverCardIndex, customOrder, saveCustomOrder, fireWipToast])
+  }, [tasks, onStatusChange, dragOverCardIndex, customOrder, saveCustomOrder, fireWipToast, onReorderTasks])
 
   const visibleTasks = agentFilter
     ? tasks.filter(t => t.agent === agentFilter)
@@ -841,7 +851,15 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
               }}
               onDragLeave={(e) => {
                 if (!e.dataTransfer.types.includes('application/x-column-drag')) {
-                  handleDragLeave()
+                  // Only clear if leaving the column entirely (not entering a child element)
+                  const relatedTarget = e.relatedTarget
+                  if (relatedTarget && e.currentTarget && e.currentTarget.contains(relatedTarget)) {
+                    // Moving within the column, don't clear
+                  } else {
+                    setDragOverColumn(null)
+                    setDragOverCardIndex(null)
+                    setDragOverCardColumn(null)
+                  }
                 }
                 setColumnDropTarget(null)
               }}
@@ -932,6 +950,24 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
                 </div>
               </div>
 
+              {/* Column fill bar — thin progress indicator under header */}
+              {!collapsedColumns[col.key] && col.wipLimit && (
+                <div className="h-[2px] w-full bg-dark-600/50 relative shrink-0">
+                  <div
+                    className="h-full rounded-r-full transition-all duration-500 ease-out"
+                    style={{
+                      width: `${Math.min(100, (columnTasks.length / col.wipLimit) * 100)}%`,
+                      backgroundColor: columnTasks.length > col.wipLimit
+                        ? '#ef4444'
+                        : columnTasks.length === col.wipLimit
+                          ? '#eab308'
+                          : col.barColor,
+                      opacity: columnTasks.length > 0 ? 0.7 : 0,
+                    }}
+                  />
+                </div>
+              )}
+
               {/* Collapsed body — vertical label */}
               {collapsedColumns[col.key] && (
                 <div
@@ -953,41 +989,105 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
                 onScroll={(e) => handleColumnScroll(col.key, e)}
                 ref={(el) => { scrollRefs.current[col.key] = el }}
               >
-                {columnTasks.map((task, idx) => (
-                  <div key={task.id} className="relative">
-                    {/* Drop indicator line — shows above this card */}
-                    {draggedTaskId && dragOverCardColumn === col.key && dragOverCardIndex === idx && draggedTaskId !== task.id && (
-                      <div className="absolute -top-1.5 left-2 right-2 h-0.5 bg-accent-orange rounded-full z-10 shadow-[0_0_6px_rgba(249,115,22,0.4)]" />
-                    )}
+                {columnTasks.map((task, idx) => {
+                  // Intra-column drag: determine if this card should shift to make room
+                  const isSameColumnDrag = draggedTaskId && draggedTaskSourceCol === col.key && dragOverCardColumn === col.key
+                  const isDraggedCard = draggedTaskId === task.id
+                  const draggedIdx = isSameColumnDrag ? columnTasks.findIndex(t => t.id === draggedTaskId) : -1
+                  const showIndicatorAbove = isSameColumnDrag && dragOverCardIndex === idx && !isDraggedCard
+                  const showIndicatorBelow = isSameColumnDrag && dragOverCardIndex === idx + 1 && idx === columnTasks.length - 1 && !isDraggedCard
+
+                  // Cross-column drag indicator (dragging from a different column)
+                  const isCrossColumnDrag = draggedTaskId && draggedTaskSourceCol !== col.key && dragOverCardColumn === col.key
+                  const showCrossIndicatorAbove = isCrossColumnDrag && dragOverCardIndex === idx
+                  const showCrossIndicatorBelow = isCrossColumnDrag && dragOverCardIndex === idx + 1 && idx === columnTasks.length - 1
+
+                  // Calculate shift transform for smooth card movement during same-column drag
+                  let shiftStyle = {}
+                  if (isSameColumnDrag && !isDraggedCard && dragOverCardIndex !== null && draggedIdx !== -1) {
+                    const gapSize = density === 'dense' ? 2 : density === 'compact' ? 6 : 14
+                    if (draggedIdx < dragOverCardIndex) {
+                      // Dragging downward: cards between old and new pos shift up
+                      if (idx > draggedIdx && idx < dragOverCardIndex) {
+                        shiftStyle = { transform: `translateY(-${gapSize}px)` }
+                      }
+                    } else if (draggedIdx > dragOverCardIndex) {
+                      // Dragging upward: cards between new and old pos shift down
+                      if (idx >= dragOverCardIndex && idx < draggedIdx) {
+                        shiftStyle = { transform: `translateY(${gapSize}px)` }
+                      }
+                    }
+                  }
+
+                  return (
                     <div
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, task)}
-                      onDragEnd={handleDragEnd}
-                      onDragOver={(e) => handleCardDragOver(e, col.key, idx)}
-                      className={`transition-opacity ${draggedTaskId === task.id ? 'opacity-40' : 'opacity-100'}`}
+                      key={task.id}
+                      className="relative"
+                      style={{
+                        transition: isSameColumnDrag && !isDraggedCard ? 'transform 200ms cubic-bezier(0.2, 0, 0, 1)' : 'none',
+                        ...shiftStyle,
+                      }}
                     >
-                      <TaskCard
-                        task={task}
-                        compact={compactMode}
-                        density={density}
-                        onClick={() => onTaskClick(task)}
-                        onQuickApprove={onQuickApprove}
-                        onRequestChanges={onRequestChanges}
-                        onRetry={onRetry}
-                        isSelected={isTaskSelected?.(task.id)}
-                        onToggleSelect={onToggleTaskSelect}
-                        allTasks={allTasks.length > 0 ? allTasks : tasks}
-                        isFocused={focusedTaskId === task.id}
-                        searchQuery={searchQuery}
-                        animationIndex={idx}
-                      />
+                      {/* Drop indicator line — intra-column: shows above this card */}
+                      {showIndicatorAbove && (
+                        <div className="absolute -top-1.5 left-2 right-2 z-10 flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
+                          <div className="flex-1 h-[2px] bg-accent-orange rounded-full shadow-[0_0_8px_rgba(249,115,22,0.4)]" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
+                        </div>
+                      )}
+                      {/* Drop indicator line — cross-column: shows above this card */}
+                      {showCrossIndicatorAbove && (
+                        <div className="absolute -top-1.5 left-2 right-2 z-10 flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
+                          <div className="flex-1 h-[2px] bg-accent-orange rounded-full shadow-[0_0_8px_rgba(249,115,22,0.4)]" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
+                        </div>
+                      )}
+                      <div
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, task)}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={(e) => handleCardDragOver(e, col.key, idx)}
+                        className={`transition-opacity duration-150 ${isDraggedCard ? 'opacity-30 scale-[0.97]' : 'opacity-100'}`}
+                        style={isDraggedCard ? { transition: 'opacity 150ms ease, transform 150ms ease' } : undefined}
+                      >
+                        <TaskCard
+                          task={task}
+                          compact={compactMode}
+                          density={density}
+                          onClick={() => onTaskClick(task)}
+                          onContextMenu={onTaskContextMenu ? (e) => { e.preventDefault(); onTaskContextMenu(e, task) } : undefined}
+                          onQuickApprove={onQuickApprove}
+                          onRequestChanges={onRequestChanges}
+                          onRetry={onRetry}
+                          isSelected={isTaskSelected?.(task.id)}
+                          onToggleSelect={onToggleTaskSelect}
+                          allTasks={allTasks.length > 0 ? allTasks : tasks}
+                          isFocused={focusedTaskId === task.id}
+                          searchQuery={searchQuery}
+                          animationIndex={idx}
+                        />
+                      </div>
+                      {/* Drop indicator line — intra-column: shows below the last card */}
+                      {showIndicatorBelow && (
+                        <div className="absolute -bottom-1.5 left-2 right-2 z-10 flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
+                          <div className="flex-1 h-[2px] bg-accent-orange rounded-full shadow-[0_0_8px_rgba(249,115,22,0.4)]" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
+                        </div>
+                      )}
+                      {/* Drop indicator line — cross-column: shows below the last card */}
+                      {showCrossIndicatorBelow && (
+                        <div className="absolute -bottom-1.5 left-2 right-2 z-10 flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
+                          <div className="flex-1 h-[2px] bg-accent-orange rounded-full shadow-[0_0_8px_rgba(249,115,22,0.4)]" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
+                        </div>
+                      )}
                     </div>
-                    {/* Drop indicator line — shows below the last card */}
-                    {draggedTaskId && dragOverCardColumn === col.key && dragOverCardIndex === idx + 1 && idx === columnTasks.length - 1 && draggedTaskId !== task.id && (
-                      <div className="absolute -bottom-1.5 left-2 right-2 h-0.5 bg-accent-orange rounded-full z-10 shadow-[0_0_6px_rgba(249,115,22,0.4)]" />
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
 
                 {/* Skeleton loading state */}
                 {loading && columnTasks.length === 0 && (

@@ -653,13 +653,28 @@ body {
   animation: checkbox-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* Priority pulse for high-priority cards */
+/* Priority pulse for high-priority cards — slow, subtle border glow */
 @keyframes priority-pulse {
-  0%, 100% { border-left-color: rgba(239, 68, 68, 0.8); }
-  50% { border-left-color: rgba(239, 68, 68, 1); }
+  0%, 100% {
+    border-left-color: rgba(239, 68, 68, 0.7);
+    box-shadow: inset 4px 0 8px -4px rgba(239, 68, 68, 0);
+  }
+  50% {
+    border-left-color: rgba(239, 68, 68, 1);
+    box-shadow: inset 4px 0 8px -4px rgba(239, 68, 68, 0.15);
+  }
 }
 .priority-pulse-high {
-  animation: priority-pulse 3s ease-in-out infinite;
+  animation: priority-pulse 4s ease-in-out infinite;
+}
+
+/* Priority dot pulse for high-priority indicators */
+@keyframes priority-dot-pulse {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+.priority-pulse-high [title="High priority"] {
+  animation: priority-dot-pulse 4s ease-in-out infinite;
 }
 
 /* Link button hover glow */
@@ -1269,4 +1284,483 @@ select option {
     min-height: auto;
     min-width: 280px;
   }
+}
+
+/* ==========================================================================
+   FOCUS MODE — hide distractions when body.focus-mode-active
+   ========================================================================== */
+body.focus-mode-active .stats-header {
+  opacity: 0.15;
+  pointer-events: none;
+  filter: blur(2px);
+  transition: opacity 0.4s ease, filter 0.4s ease;
+}
+body.focus-mode-active .agent-sidebar,
+body.focus-mode-active .activity-feed-sidebar {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(20px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+body.focus-mode-active .quick-filters-bar {
+  opacity: 0.1;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+body.focus-mode-active .kanban-board {
+  max-width: 100% !important;
+  margin: 0 auto;
+  transition: max-width 0.4s ease;
+}
+
+/* ==========================================================================
+   COMPREHENSIVE LIGHT THEME SYSTEM
+   Extends and reinforces the light theme with full coverage of all
+   dark-* utility classes, text mappings, borders, shadows, scrollbars,
+   and backdrop-blur adjustments.
+   ========================================================================== */
+
+/* ----- 1. Extended CSS Custom Properties ----- */
+[data-theme="light"] {
+  /* Background scale */
+  --lt-bg-white: #ffffff;
+  --lt-bg-gray-50: #f9fafb;
+  --lt-bg-gray-100: #f3f4f6;
+  --lt-bg-gray-200: #e5e7eb;
+  --lt-bg-gray-300: #d1d5db;
+
+  /* Text scale */
+  --lt-text-900: #111827;
+  --lt-text-800: #1f2937;
+  --lt-text-700: #374151;
+  --lt-text-600: #4b5563;
+  --lt-text-500: #6b7280;
+  --lt-text-400: #9ca3af;
+
+  /* Border scale */
+  --lt-border-200: #e5e7eb;
+  --lt-border-300: #d1d5db;
+
+  /* Card and surface treatments */
+  --lt-card-bg: #ffffff;
+  --lt-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --lt-card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+
+  color-scheme: light;
+}
+
+/* ----- 2. Background Utility Overrides (dark-* → light equivalents) ----- */
+[data-theme="light"] .bg-dark-900 {
+  background-color: #ffffff !important;
+}
+[data-theme="light"] .bg-dark-800 {
+  background-color: #f9fafb !important;
+}
+[data-theme="light"] .bg-dark-700 {
+  background-color: #f3f4f6 !important;
+}
+[data-theme="light"] .bg-dark-600 {
+  background-color: #e5e7eb !important;
+}
+[data-theme="light"] .bg-dark-500 {
+  background-color: #d1d5db !important;
+}
+
+/* ----- 3. Text Color Overrides (light gray → dark gray) ----- */
+[data-theme="light"] .text-gray-100 {
+  color: #111827 !important;
+}
+[data-theme="light"] .text-gray-200 {
+  color: #1f2937 !important;
+}
+[data-theme="light"] .text-gray-300 {
+  color: #374151 !important;
+}
+[data-theme="light"] .text-gray-400 {
+  color: #4b5563 !important;
+}
+[data-theme="light"] .text-gray-500 {
+  color: #6b7280 !important;
+}
+[data-theme="light"] .text-gray-600 {
+  color: #9ca3af !important;
+}
+[data-theme="light"] .text-white {
+  color: #111827 !important;
+}
+
+/* ----- 4. Border Overrides ----- */
+[data-theme="light"] .border-dark-500 {
+  border-color: #d1d5db !important;
+}
+[data-theme="light"] .border-dark-600 {
+  border-color: #e5e7eb !important;
+}
+[data-theme="light"] .border-dark-700 {
+  border-color: #f3f4f6 !important;
+}
+[data-theme="light"] .border-dark-800 {
+  border-color: #f9fafb !important;
+}
+[data-theme="light"] .border-gray-700 {
+  border-color: #d1d5db !important;
+}
+[data-theme="light"] .border-gray-800 {
+  border-color: #e5e7eb !important;
+}
+[data-theme="light"] .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .border-white\/20 {
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+[data-theme="light"] .divide-dark-600 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e5e7eb !important;
+}
+[data-theme="light"] .divide-dark-500 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #d1d5db !important;
+}
+
+/* ----- 5. Hover Background Overrides ----- */
+[data-theme="light"] .hover\:bg-dark-900:hover {
+  background-color: #f3f4f6 !important;
+}
+[data-theme="light"] .hover\:bg-dark-800:hover {
+  background-color: #f3f4f6 !important;
+}
+[data-theme="light"] .hover\:bg-dark-700:hover {
+  background-color: #e5e7eb !important;
+}
+[data-theme="light"] .hover\:bg-dark-600:hover {
+  background-color: #d1d5db !important;
+}
+[data-theme="light"] .hover\:bg-dark-500:hover {
+  background-color: #d1d5db !important;
+}
+[data-theme="light"] .hover\:bg-white\/5:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+[data-theme="light"] .hover\:bg-white\/10:hover {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+/* ----- 6. Hover Text Overrides ----- */
+[data-theme="light"] .hover\:text-white:hover {
+  color: #111827 !important;
+}
+[data-theme="light"] .hover\:text-gray-100:hover {
+  color: #111827 !important;
+}
+[data-theme="light"] .hover\:text-gray-200:hover {
+  color: #1f2937 !important;
+}
+[data-theme="light"] .hover\:text-gray-300:hover {
+  color: #374151 !important;
+}
+
+/* ----- 7. Hover Border Overrides ----- */
+[data-theme="light"] .hover\:border-dark-400:hover {
+  border-color: #d1d5db !important;
+}
+[data-theme="light"] .hover\:border-dark-500:hover {
+  border-color: #d1d5db !important;
+}
+
+/* ----- 8. Opacity Variant Background Overrides ----- */
+[data-theme="light"] .bg-dark-900\/50 {
+  background-color: rgba(255, 255, 255, 0.8) !important;
+}
+[data-theme="light"] .bg-dark-900\/60 {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+}
+[data-theme="light"] .bg-dark-900\/70 {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+}
+[data-theme="light"] .bg-dark-800\/60 {
+  background-color: rgba(249, 250, 251, 0.85) !important;
+}
+[data-theme="light"] .bg-dark-800\/70 {
+  background-color: rgba(249, 250, 251, 0.9) !important;
+}
+[data-theme="light"] .bg-dark-800\/90 {
+  background-color: rgba(249, 250, 251, 0.97) !important;
+}
+[data-theme="light"] .bg-dark-700\/40 {
+  background-color: rgba(243, 244, 246, 0.6) !important;
+}
+[data-theme="light"] .bg-dark-700\/60 {
+  background-color: rgba(243, 244, 246, 0.8) !important;
+}
+[data-theme="light"] .bg-dark-700\/70 {
+  background-color: rgba(243, 244, 246, 0.85) !important;
+}
+[data-theme="light"] .bg-dark-700\/80 {
+  background-color: rgba(243, 244, 246, 0.92) !important;
+}
+[data-theme="light"] .bg-dark-700\/90 {
+  background-color: rgba(243, 244, 246, 0.95) !important;
+}
+[data-theme="light"] .bg-dark-600\/40 {
+  background-color: rgba(229, 231, 235, 0.6) !important;
+}
+[data-theme="light"] .bg-dark-600\/60 {
+  background-color: rgba(229, 231, 235, 0.8) !important;
+}
+[data-theme="light"] .bg-dark-600\/70 {
+  background-color: rgba(229, 231, 235, 0.85) !important;
+}
+[data-theme="light"] .bg-dark-600\/90 {
+  background-color: rgba(229, 231, 235, 0.95) !important;
+}
+[data-theme="light"] .bg-dark-500\/50 {
+  background-color: rgba(209, 213, 219, 0.7) !important;
+}
+[data-theme="light"] .bg-dark-500\/30 {
+  background-color: rgba(209, 213, 219, 0.45) !important;
+}
+
+/* White-on-dark overlays reversed for light mode */
+[data-theme="light"] .bg-white\/\[0\.03\] {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+}
+[data-theme="light"] .bg-white\/\[0\.04\] {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+[data-theme="light"] .bg-white\/\[0\.10\] {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+[data-theme="light"] .bg-white\/\[0\.12\] {
+  background-color: rgba(0, 0, 0, 0.07) !important;
+}
+[data-theme="light"] .bg-white\/\[0\.15\] {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .bg-white\/20 {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .bg-white\/30 {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+/* ----- 9. Ring Color Overrides ----- */
+[data-theme="light"] .ring-dark-500 {
+  --tw-ring-color: #d1d5db !important;
+}
+[data-theme="light"] .ring-dark-600 {
+  --tw-ring-color: #e5e7eb !important;
+}
+[data-theme="light"] .ring-white\/10 {
+  --tw-ring-color: rgba(0, 0, 0, 0.06) !important;
+}
+[data-theme="light"] .ring-white\/20 {
+  --tw-ring-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .focus\:ring-dark-500:focus {
+  --tw-ring-color: #d1d5db !important;
+}
+
+/* ----- 10. Shadow Overrides ----- */
+[data-theme="light"] .shadow-dark-900\/20 {
+  --tw-shadow-color: rgba(0, 0, 0, 0.06) !important;
+}
+[data-theme="light"] .shadow-dark-900\/30 {
+  --tw-shadow-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .shadow-black\/20 {
+  --tw-shadow-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .shadow-black\/30 {
+  --tw-shadow-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+/* ----- 11. Light Mode Card Treatments ----- */
+[data-theme="light"] .task-card {
+  background-color: #ffffff !important;
+  border-color: #e5e7eb !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+[data-theme="light"] .task-card:hover {
+  border-color: #d1d5db !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Status-aware card hovers with softer glows in light mode */
+[data-theme="light"] .task-card.status-review:hover {
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.1), 0 0 0 1px rgba(59, 130, 246, 0.15) !important;
+  border-color: rgba(59, 130, 246, 0.3) !important;
+}
+[data-theme="light"] .task-card.status-in-progress:hover {
+  box-shadow: 0 4px 16px rgba(234, 179, 8, 0.08), 0 0 0 1px rgba(234, 179, 8, 0.12) !important;
+  border-color: rgba(234, 179, 8, 0.25) !important;
+}
+[data-theme="light"] .task-card.status-error:hover {
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.1), 0 0 0 1px rgba(239, 68, 68, 0.15) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+[data-theme="light"] .task-card.status-done:hover {
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.08), 0 0 0 1px rgba(34, 197, 94, 0.12) !important;
+  border-color: rgba(34, 197, 94, 0.2) !important;
+}
+
+/* Dragging card in light mode */
+[data-theme="light"] .task-card-dragging {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* ----- 12. Light Mode Scrollbar Styles ----- */
+[data-theme="light"] ::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+}
+[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #f9fafb !important;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #d1d5db !important;
+  border-radius: 3px !important;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af !important;
+}
+
+/* Firefox scrollbar for light mode */
+[data-theme="light"] * {
+  scrollbar-color: #d1d5db #f9fafb;
+}
+
+/* ----- 13. Backdrop Blur Adjustments ----- */
+[data-theme="light"] .backdrop-blur-sm {
+  --tw-backdrop-blur: blur(4px) !important;
+  backdrop-filter: blur(4px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(4px) saturate(180%) !important;
+}
+[data-theme="light"] .backdrop-blur {
+  --tw-backdrop-blur: blur(8px) !important;
+  backdrop-filter: blur(8px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(180%) !important;
+}
+[data-theme="light"] .backdrop-blur-md {
+  --tw-backdrop-blur: blur(12px) !important;
+  backdrop-filter: blur(12px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
+}
+[data-theme="light"] .backdrop-blur-lg {
+  --tw-backdrop-blur: blur(16px) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+}
+[data-theme="light"] .backdrop-blur-xl {
+  --tw-backdrop-blur: blur(24px) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+}
+
+/* ----- 14. Gradient Overrides ----- */
+[data-theme="light"] .from-dark-900 {
+  --tw-gradient-from: #ffffff !important;
+}
+[data-theme="light"] .from-dark-800 {
+  --tw-gradient-from: #f9fafb !important;
+}
+[data-theme="light"] .to-dark-900 {
+  --tw-gradient-to: #ffffff !important;
+}
+[data-theme="light"] .to-dark-800 {
+  --tw-gradient-to: #f9fafb !important;
+}
+[data-theme="light"] .to-dark-900\/0 {
+  --tw-gradient-to: rgba(255, 255, 255, 0) !important;
+}
+[data-theme="light"] .via-dark-800 {
+  --tw-gradient-via: #f9fafb !important;
+}
+[data-theme="light"] .from-transparent {
+  --tw-gradient-from: transparent !important;
+}
+
+/* ----- 15. Focus-visible and Focus-within States ----- */
+[data-theme="light"] .focus-within\:border-dark-400:focus-within {
+  border-color: #d1d5db !important;
+}
+[data-theme="light"] .focus\:bg-dark-700:focus {
+  background-color: #f3f4f6 !important;
+}
+[data-theme="light"] .focus\:border-gray-500:focus {
+  border-color: #6b7280 !important;
+}
+
+/* ----- 16. Tag Styling in Light Mode ----- */
+[data-theme="light"] .tag {
+  background: #f3f4f6 !important;
+  color: #374151 !important;
+}
+[data-theme="light"] .tag-interactive:hover {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+  color: #111827 !important;
+}
+
+/* ----- 17. Kanban Drop Zone in Light Mode ----- */
+[data-theme="light"] .kanban-dropzone-active {
+  background: rgba(249, 115, 22, 0.04) !important;
+  box-shadow: inset 0 0 16px rgba(249, 115, 22, 0.08) !important;
+}
+
+/* ----- 18. Compact Card Hover in Light Mode ----- */
+[data-theme="light"] .compact-card-hover:hover {
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* ----- 19. Content Type Badge Shimmer in Light Mode ----- */
+[data-theme="light"] .content-type-badge::after {
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.03) 50%, transparent 100%) !important;
+  background-size: 200% 100% !important;
+}
+
+/* ----- 20. Agent Pulse Animations in Light Mode ----- */
+[data-theme="light"] .agent-pulse-online {
+  animation-name: agent-pulse-light !important;
+}
+@keyframes agent-pulse-light {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.3); }
+  50% { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); }
+}
+
+[data-theme="light"] .agent-avatar-active {
+  animation-name: agent-breathe-light !important;
+}
+@keyframes agent-breathe-light {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.25),
+                0 0 6px rgba(34, 197, 94, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0),
+                0 0 12px rgba(34, 197, 94, 0.18);
+  }
+}
+
+/* ----- 21. Placeholder Text in Light Mode ----- */
+[data-theme="light"] .placeholder-gray-500::placeholder {
+  color: #6b7280 !important;
+}
+[data-theme="light"] .placeholder-gray-600::placeholder {
+  color: #9ca3af !important;
+}
+[data-theme="light"] .placeholder-gray-400::placeholder {
+  color: #9ca3af !important;
+}
+
+/* ----- 22. Selection Colors in Light Mode ----- */
+[data-theme="light"] ::selection {
+  background-color: rgba(249, 115, 22, 0.15);
+  color: #111827;
+}
+
+/* ----- 23. Transition Smoothing for Theme Switch ----- */
+[data-theme="light"] *,
+[data-theme="light"] *::before,
+[data-theme="light"] *::after {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
 }

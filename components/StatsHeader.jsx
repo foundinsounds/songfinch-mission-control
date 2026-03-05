@@ -186,7 +186,7 @@ function ProgressRing({ completed, total, size = 28, strokeWidth = 3 }) {
   )
 }
 
-export default function StatsHeader({ stats, sparklines, currentTime, dataSource, lastSync, isSyncing, onRefresh, lastRunTime, theme, onToggleTheme, onRunAgents, runningAgents, onOpenSettings, onOpenMetrics, onPlanCampaign, planningCampaign, onToggleSidebar, onToggleFeed, notificationSlot, pipelineSlot }) {
+export default function StatsHeader({ stats, sparklines, currentTime, dataSource, lastSync, isSyncing, onRefresh, lastRunTime, theme, onToggleTheme, onRunAgents, runningAgents, onOpenSettings, onOpenMetrics, onOpenComparison, onOpenCalendarHeatmap, onOpenTimeline, onToggleFocusMode, focusModeActive, onPlanCampaign, planningCampaign, onToggleSidebar, onToggleFeed, notificationSlot, pipelineSlot, productivitySlot }) {
   const formatTime = (date) => {
     return date.toLocaleTimeString('en-US', {
       hour: '2-digit',
@@ -314,6 +314,9 @@ export default function StatsHeader({ stats, sparklines, currentTime, dataSource
           <LastRunIndicator lastRunTime={lastRunTime} />
         </div>
 
+        {/* Productivity Score Widget */}
+        {productivitySlot && <div className="hidden lg:block">{productivitySlot}</div>}
+
         <div className="w-px h-4 bg-dark-500 hidden sm:block" />
 
         {/* Theme */}
@@ -327,8 +330,40 @@ export default function StatsHeader({ stats, sparklines, currentTime, dataSource
 
         {/* Agent Metrics */}
         {onOpenMetrics && (
-          <button onClick={onOpenMetrics} className="header-btn p-1.5 rounded transition-all" title="Agent Metrics">
+          <button onClick={onOpenMetrics} className="header-btn p-1.5 rounded transition-all" title="Agent Metrics (M)">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>
+          </button>
+        )}
+
+        {/* Agent Comparison */}
+        {onOpenComparison && (
+          <button onClick={onOpenComparison} className="header-btn p-1.5 rounded transition-all" title="Agent Comparison (C)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M21 3l-7 7"/><path d="M3 3l7 7"/><path d="M16 21h5v-5"/><path d="M8 21H3v-5"/><path d="M21 21l-7-7"/><path d="M3 21l7-7"/></svg>
+          </button>
+        )}
+        {onOpenCalendarHeatmap && (
+          <button onClick={onOpenCalendarHeatmap} className="header-btn p-1.5 rounded transition-all" title="Content Calendar Heatmap (G)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><rect x="7" y="13" width="3" height="3" rx="0.5" opacity="0.3" /><rect x="14" y="13" width="3" height="3" rx="0.5" opacity="0.7" /><rect x="7" y="17" width="3" height="3" rx="0.5" opacity="0.5" /></svg>
+          </button>
+        )}
+
+        {/* Agent Timeline */}
+        {onOpenTimeline && (
+          <button onClick={onOpenTimeline} className="header-btn p-1.5 rounded transition-all" title="Agent Timeline (Y)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="12" x2="21" y2="12"/><circle cx="7" cy="12" r="2"/><circle cx="14" cy="12" r="2"/><circle cx="20" cy="12" r="1.5"/><line x1="7" y1="6" x2="7" y2="10"/><line x1="14" y1="6" x2="14" y2="10"/></svg>
+          </button>
+        )}
+
+        {/* Focus Mode */}
+        {onToggleFocusMode && (
+          <button
+            onClick={onToggleFocusMode}
+            className={`header-btn p-1.5 rounded transition-all ${focusModeActive ? 'text-accent-green bg-accent-green/10' : ''}`}
+            title={`Focus Mode (F) ${focusModeActive ? '— Active' : ''}`}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+            </svg>
           </button>
         )}
 
