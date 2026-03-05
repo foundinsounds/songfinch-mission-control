@@ -263,13 +263,38 @@ async function autoAssignInboxTasks(tasks, agents, skillData, activity) {
   return assigned
 }
 
+// ---- INTERNAL FETCH HELPER ----
+// Vercel serverless self-fetch is fragile: VERCEL_URL may be a preview/deployment URL,
+// not the production domain. Use VERCEL_PROJECT_PRODUCTION_URL first (guaranteed production),
+// then fall back through other options. Add timeout to prevent hanging.
+
+function getBaseUrl() {
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`
+  }
+  return 'http://localhost:3000'
+}
+
+async function internalFetch(path, options = {}) {
+  const url = `${getBaseUrl()}${path}`
+  const timeout = options.timeout || 120000 // 2 min default, up from Node default
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeout)
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal })
+    return res
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 // ---- MEMORY HELPERS ----
 
 async function getAgentMemories(agentName, taskContext = {}) {
   try {
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : 'http://localhost:3000'
     const params = new URLSearchParams({
       agent: agentName,
       ranked: 'true',
@@ -280,7 +305,7 @@ async function getAgentMemories(agentName, taskContext = {}) {
     if (taskContext.query) params.set('query', taskContext.query)
     if (taskContext.territory) params.set('territory', taskContext.territory)
 
-    const res = await fetch(`${baseUrl}/api/memory?${params.toString()}`, {
+    const res = await internalFetch(`/api/memory?${params.toString()}`, {
       cache: 'no-store',
     })
     if (!res.ok) return []
@@ -304,10 +329,7 @@ async function countTaskErrors(taskName) {
 
 async function saveMemory({ agent, type, content, source, importance, taskContext }) {
   try {
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : 'http://localhost:3000'
-    await fetch(`${baseUrl}/api/memory`, {
+    await internalFetch(`/api/memory`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ agent, type, content, source, importance, taskContext }),
@@ -321,13 +343,11 @@ async function saveMemory({ agent, type, content, source, importance, taskContex
 
 async function triggerAutoReview() {
   try {
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : 'http://localhost:3000'
-    const res = await fetch(`${baseUrl}/api/review/auto`, {
+    const res = await internalFetch(`/api/review/auto`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ limit: 15 }),
+      timeout: 180000, // 3 min — reviews can be slow with MUSE QA gate
     })
     const data = await res.json()
     return data
@@ -373,17 +393,21 @@ async function triggerAggressivePlanning(tasks, activity) {
       }
     }
 
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : 'http://localhost:3000'
-    const planRes = await fetch(`${baseUrl}/api/campaigns/plan`, {
+    console.log(`[RUNNER] Calling plan endpoint at: ${getBaseUrl()}/api/campaigns/plan`)
+    const planRes = await internalFetch(`/api/campaigns/plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         weeksAhead: 2, // Always plan 2 weeks ahead
         contentGaps: gapContext || undefined,
       }),
+      timeout: 180000, // 3 min — CMO planning involves AI calls
     })
+    if (!planRes.ok) {
+      const errText = await planRes.text().catch(() => 'unknown')
+      console.warn(`[RUNNER] Plan endpoint returned ${planRes.status}: ${errText.slice(0, 200)}`)
+      return null
+    }
     const planData = await planRes.json()
     if (planData.tasksCreated > 0) {
       console.log(`[RUNNER] CMO planned ${planData.tasksCreated} new tasks for "${planData.campaign}"`)
