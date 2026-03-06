@@ -390,6 +390,9 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
   })
   const [columnSorts, setColumnSorts] = useState({}) // per-column sort: { [colKey]: 'priority'|'date'|'name'|'agent' }
   const [wipToasts, setWipToasts] = useState([])
+  // Per-column visible task limits — start at PAGE_SIZE, expand with "Show more"
+  const COLUMN_PAGE_SIZE = 50
+  const [columnLimits, setColumnLimits] = useState({})
   const scrollRefs = useRef({})
   const wipToastIdRef = useRef(0)
 
@@ -997,7 +1000,17 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
                 onScroll={(e) => handleColumnScroll(col.key, e)}
                 ref={(el) => { scrollRefs.current[col.key] = el }}
               >
-                {columnTasks.map((task, idx) => {
+                {(() => {
+                  // Progressive rendering: limit DOM nodes per column to prevent
+                  // browser thrashing when Inbox has 700+ tasks. Show first PAGE_SIZE,
+                  // then expand in increments with "Show more".
+                  const limit = columnLimits[col.key] || COLUMN_PAGE_SIZE
+                  const totalCount = columnTasks.length
+                  const visibleColumnTasks = totalCount > limit ? columnTasks.slice(0, limit) : columnTasks
+                  const hiddenCount = totalCount - visibleColumnTasks.length
+
+                  return (<>
+                {visibleColumnTasks.map((task, idx) => {
                   // Intra-column drag: determine if this card should shift to make room
                   const isSameColumnDrag = draggedTaskId && draggedTaskSourceCol === col.key && dragOverCardColumn === col.key
                   const isDraggedCard = draggedTaskId === task.id
@@ -1096,6 +1109,21 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
                     </div>
                   )
                 })}
+
+                {/* "Show more" button when column has more tasks than the visible limit */}
+                {hiddenCount > 0 && (
+                  <button
+                    onClick={() => setColumnLimits(prev => ({
+                      ...prev,
+                      [col.key]: (prev[col.key] || COLUMN_PAGE_SIZE) + COLUMN_PAGE_SIZE,
+                    }))}
+                    className="w-full py-2 mt-1 text-[11px] font-medium text-gray-400 hover:text-gray-200 bg-dark-700/40 hover:bg-dark-600/60 rounded-lg border border-dark-500/50 hover:border-dark-400/50 transition-all"
+                  >
+                    Show {Math.min(hiddenCount, COLUMN_PAGE_SIZE)} more ({hiddenCount} remaining)
+                  </button>
+                )}
+                  </>)
+                })()}
 
                 {/* Skeleton loading state */}
                 {loading && columnTasks.length === 0 && (
