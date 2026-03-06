@@ -1,6 +1,11 @@
 import { updateTask, addActivity, addContent } from '../../../../lib/airtable'
 import { safeJsonParse, badRequest, successResponse, apiError } from '../../../../lib/api-utils'
 
+// Valid statuses that exist in the Airtable Status select field
+const VALID_STATUSES = new Set([
+  'Inbox', 'Assigned', 'In Progress', 'Review', 'Done', 'Revisit',
+])
+
 export async function POST(request) {
   try {
     const { data: body, error } = await safeJsonParse(request)
@@ -14,6 +19,10 @@ export async function POST(request) {
     // Map frontend field names to Airtable field names
     const airtableFields = {}
     if (fields.Status) {
+      // Validate status before sending to Airtable
+      if (!VALID_STATUSES.has(fields.Status)) {
+        return badRequest(`Invalid status "${fields.Status}". Valid statuses: ${[...VALID_STATUSES].join(', ')}`)
+      }
       airtableFields['Status'] = fields.Status
       // Stamp completion timestamp when marking as Done
       if (fields.Status === 'Done') {

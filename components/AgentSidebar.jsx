@@ -41,7 +41,7 @@ function useNextRunCountdown() {
   return timeLeft
 }
 
-export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onConfigAgent, tasks }) {
+export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onConfigAgent, tasks, collapsed = false, onToggleCollapse }) {
   const nextRun = useNextRunCountdown()
 
   const getAgentTaskCount = (agentName) => {
@@ -103,21 +103,39 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onC
   const onlineCount = agents.filter(a => a.status === 'Working' || a.status === 'Active').length
 
   return (
-    <aside className="w-72 bg-dark-800 border-r border-dark-500 flex flex-col shrink-0 overflow-hidden">
+    <aside className={`${collapsed ? 'w-14' : 'w-72'} bg-dark-800 border-r border-dark-500 flex flex-col shrink-0 overflow-hidden transition-all duration-300`}>
       {/* Sidebar Header */}
-      <div className="px-4 py-3 border-b border-dark-500 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-accent-green pulse-dot"></div>
-          <span className="text-sm font-semibold">AGENTS</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-accent-green flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent-green inline-block"></span>
-            {onlineCount} online
-          </span>
-          <span className="text-xs bg-dark-600 px-2 py-0.5 rounded-full text-gray-400">
-            {agents.length}
-          </span>
+      <div className={`${collapsed ? 'px-2 justify-center' : 'px-4 justify-between'} py-3 border-b border-dark-500 flex items-center`}>
+        {!collapsed && (
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-accent-green pulse-dot"></div>
+            <span className="text-sm font-semibold">AGENTS</span>
+          </div>
+        )}
+        <div className="flex items-center gap-1">
+          {!collapsed && (
+            <>
+              <span className="text-[10px] text-accent-green flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent-green inline-block"></span>
+                {onlineCount} online
+              </span>
+              <span className="text-xs bg-dark-600 px-2 py-0.5 rounded-full text-gray-400">
+                {agents.length}
+              </span>
+            </>
+          )}
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              className="p-1 rounded hover:bg-dark-600 text-gray-500 hover:text-gray-300 transition-colors"
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`}>
+                <polyline points="11 17 6 12 11 7" />
+                <polyline points="18 17 13 12 18 7" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -131,6 +149,34 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onC
           const taskBreakdown = getAgentTaskBreakdown(agent.name)
           const isSelected = selectedAgent === agent.name
 
+          // Collapsed mode — icon-only view
+          if (collapsed) {
+            return (
+              <div key={agent.id} className="flex justify-center py-1.5">
+                <button
+                  onClick={() => onSelectAgent(agent.name)}
+                  className={`relative w-9 h-9 rounded-full flex items-center justify-center text-lg transition-all ${
+                    isSelected ? 'ring-2 ring-white ring-offset-1 ring-offset-dark-800' : 'hover:ring-1 hover:ring-gray-600'
+                  } ${agent.status === 'Working' ? 'agent-avatar-active' : ''}`}
+                  style={{
+                    background: `${agent.color}15`,
+                    border: `2px solid ${agent.color}`,
+                  }}
+                  title={`${agent.name} — ${agent.role} (${taskBreakdown.total} tasks)`}
+                >
+                  {agent.emoji}
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-dark-800 ${getStatusColor(agent.status)} ${agent.status !== 'Idle' ? 'pulse-dot' : ''}`} />
+                  {taskBreakdown.total > 0 && (
+                    <span className="absolute -top-1 -right-1.5 min-w-[14px] h-[14px] px-0.5 rounded-full text-[8px] font-bold bg-accent-blue text-white flex items-center justify-center leading-none">
+                      {taskBreakdown.total}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )
+          }
+
+          // Expanded mode — full view
           return (
             <div key={agent.id} className="relative group">
               <button
@@ -235,64 +281,79 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onC
         })}
       </div>
 
-      {/* Status Legend */}
-      <div className="px-4 py-2 border-t border-dark-500 space-y-1.5">
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-[9px] text-gray-600 uppercase tracking-wider font-semibold">Agent:</span>
-          <div className="flex items-center gap-1">
-            <div className="w-1.5 h-1.5 rounded-full bg-accent-green pulse-dot" />
-            <span className="text-[9px] text-gray-500">Working</span>
+      {/* Status Legend — hidden when collapsed */}
+      {!collapsed && (
+        <div className="px-4 py-2 border-t border-dark-500 space-y-1.5">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[9px] text-gray-600 uppercase tracking-wider font-semibold">Agent:</span>
+            <div className="flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-accent-green pulse-dot" />
+              <span className="text-[9px] text-gray-500">Working</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-accent-blue" />
+              <span className="text-[9px] text-gray-500">Active</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+              <span className="text-[9px] text-gray-500">Idle</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <div className="w-1.5 h-1.5 rounded-full bg-accent-blue" />
-            <span className="text-[9px] text-gray-500">Active</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-1.5 h-1.5 rounded-full bg-gray-500" />
-            <span className="text-[9px] text-gray-500">Idle</span>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[9px] text-gray-600 uppercase tracking-wider font-semibold">Tasks:</span>
+            <div className="flex items-center gap-1">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-accent-blue/30 border border-accent-blue/50" />
+              <span className="text-[9px] text-gray-500">In Progress</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-accent-orange/30 border border-accent-orange/50" />
+              <span className="text-[9px] text-gray-500">Review</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-500/30 border border-gray-500/50" />
+              <span className="text-[9px] text-gray-500">Assigned</span>
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-[9px] text-gray-600 uppercase tracking-wider font-semibold">Tasks:</span>
-          <div className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded-full bg-accent-blue/30 border border-accent-blue/50" />
-            <span className="text-[9px] text-gray-500">In Progress</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded-full bg-accent-orange/30 border border-accent-orange/50" />
-            <span className="text-[9px] text-gray-500">Review</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-500/30 border border-gray-500/50" />
-            <span className="text-[9px] text-gray-500">Assigned</span>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Sidebar Footer */}
-      <div className="px-4 py-3 border-t border-dark-500 space-y-1.5">
-        <div className="flex items-center justify-between text-[11px] text-gray-500">
-          <span className="flex items-center gap-1.5">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-orange">
+      <div className={`${collapsed ? 'px-1 py-2' : 'px-4 py-3'} border-t border-dark-500 space-y-1.5`}>
+        {collapsed ? (
+          /* Collapsed: just show next run timer icon */
+          <div className="flex flex-col items-center gap-1">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-accent-orange">
               <circle cx="12" cy="12" r="10" />
               <polyline points="12 6 12 12 16 14" />
             </svg>
-            Next Run
-          </span>
-          <span className="text-accent-orange font-semibold font-mono text-[10px]">{nextRun}</span>
-        </div>
-        <div className="flex items-center justify-between text-[11px] text-gray-500">
-          <span>Total Completed</span>
-          <span className="text-accent-green font-semibold">
-            {agents.reduce((sum, a) => sum + a.tasksCompleted, 0)}
-          </span>
-        </div>
-        <div className="flex items-center justify-between text-[11px] text-gray-500">
-          <span>Total Output</span>
-          <span className="text-gray-400 font-semibold font-mono text-[10px]">
-            {Math.round(tasks.filter(t => t.output && t.status === 'Done').reduce((s, t) => s + t.output.length, 0) / 1000)}k chars
-          </span>
-        </div>
+            <span className="text-[8px] text-accent-orange font-mono leading-none">{nextRun.replace(' ', '\n').split('m')[0]}m</span>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between text-[11px] text-gray-500">
+              <span className="flex items-center gap-1.5">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-orange">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                Next Run
+              </span>
+              <span className="text-accent-orange font-semibold font-mono text-[10px]">{nextRun}</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-gray-500">
+              <span>Total Completed</span>
+              <span className="text-accent-green font-semibold">
+                {agents.reduce((sum, a) => sum + a.tasksCompleted, 0)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-gray-500">
+              <span>Total Output</span>
+              <span className="text-gray-400 font-semibold font-mono text-[10px]">
+                {Math.round(tasks.filter(t => t.output && t.status === 'Done').reduce((s, t) => s + t.output.length, 0) / 1000)}k chars
+              </span>
+            </div>
+          </>
+        )}
       </div>
     </aside>
   )

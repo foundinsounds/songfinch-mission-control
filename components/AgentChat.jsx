@@ -15,7 +15,7 @@ function storeMessages(msgs) {
   localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(msgs.slice(-200)))
 }
 
-export default function AgentChat({ agents, isOpen, onClose, onOpen }) {
+export default function AgentChat({ agents, isOpen, onClose, onOpen, onDataRefresh }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [selectedChannel, setSelectedChannel] = useState('council')
@@ -124,7 +124,7 @@ export default function AgentChat({ agents, isOpen, onClose, onOpen }) {
         throw new Error(data.fallbackMessage || data.error || 'Failed to get response')
       }
 
-      // Add AI response
+      // Add AI response (with any executed actions)
       const aiReply = {
         id: Date.now() + 1,
         channel: channelId,
@@ -136,6 +136,7 @@ export default function AgentChat({ agents, isOpen, onClose, onOpen }) {
         isDM: !!dmTarget,
         dmTarget: dmTarget ? 'You' : undefined,
         model: data.model,
+        actions: data.actions || [],
       }
 
       setMessages(prev => {
@@ -143,6 +144,11 @@ export default function AgentChat({ agents, isOpen, onClose, onOpen }) {
         storeMessages(next)
         return next
       })
+
+      // If actions were executed, refresh the dashboard data so Kanban/pipeline updates
+      if (data.actions?.length > 0 && onDataRefresh) {
+        setTimeout(() => onDataRefresh(), 500)
+      }
 
     } catch (err) {
       console.error('[AgentChat] Error:', err)
@@ -334,10 +340,10 @@ export default function AgentChat({ agents, isOpen, onClose, onOpen }) {
             </div>
           </div>
 
-          {/* Advisory mode banner */}
-          <div className="px-4 py-1.5 bg-amber-900/10 border-b border-amber-900/20 flex items-center gap-1.5 shrink-0">
-            <span className="text-[10px]">{'\u{1F4AC}'}</span>
-            <span className="text-[9px] text-amber-500/70">Advisory mode — chat doesn't change task assignments or agent behavior</span>
+          {/* Live mode banner */}
+          <div className="px-4 py-1.5 bg-emerald-900/10 border-b border-emerald-900/20 flex items-center gap-1.5 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[9px] text-emerald-500/70">Live mode — agents can move tasks, reassign work, and create new tasks</span>
           </div>
 
           {/* Messages */}
@@ -355,8 +361,8 @@ export default function AgentChat({ agents, isOpen, onClose, onOpen }) {
                 </div>
                 <div className="text-gray-600 text-[10px]">
                   {dmTarget
-                    ? `${dmTarget} will respond using their AI personality and current pipeline knowledge.`
-                    : 'Ask about strategy, content ideas, or get insights. Responses are advisory only.'
+                    ? `${dmTarget} will respond and can take real actions on the pipeline.`
+                    : 'Ask about strategy, assign tasks, or give instructions. Agents can take real actions.'
                   }
                 </div>
               </div>
@@ -402,6 +408,24 @@ export default function AgentChat({ agents, isOpen, onClose, onOpen }) {
                       </button>
                     )}
                   </div>
+                  {/* Action results — shown as chips below messages that executed pipeline actions */}
+                  {msg.actions?.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {msg.actions.map((action, idx) => (
+                        <div
+                          key={idx}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-medium ${
+                            action.success
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-red-500/15 text-red-400 border border-red-500/20'
+                          }`}
+                        >
+                          <span>{action.success ? '\u2713' : '\u2717'}</span>
+                          <span>{action.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -478,10 +502,11 @@ export default function AgentChat({ agents, isOpen, onClose, onOpen }) {
               </button>
             </div>
             <div className="text-[9px] text-gray-700 mt-1.5 flex items-center justify-between">
-              <span>
+              <span className="flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-emerald-500" />
                 {dmTarget
-                  ? `Chatting with ${dmTarget} \u{2022} Advisory only`
-                  : `#${selectedChannel || 'council'} \u{2022} Advisory only`
+                  ? `Chatting with ${dmTarget} \u{2022} Live`
+                  : `#${selectedChannel || 'council'} \u{2022} Live`
                 }
               </span>
               <span>{channelMessages.length} messages</span>

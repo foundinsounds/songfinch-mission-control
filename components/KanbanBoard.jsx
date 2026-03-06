@@ -548,6 +548,16 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
     })
   }, [onToggleTaskSelect, isTaskSelected])
 
+  // Deselect all tasks in a column
+  const deselectAllInColumn = useCallback((columnTasks) => {
+    if (!onToggleTaskSelect) return
+    columnTasks.forEach(task => {
+      if (isTaskSelected?.(task.id)) {
+        onToggleTaskSelect(task.id)
+      }
+    })
+  }, [onToggleTaskSelect, isTaskSelected])
+
   // Move all tasks in one column to another
   const moveAllTasks = useCallback((columnTasks, targetStatus) => {
     if (!onStatusChange) return
@@ -837,6 +847,10 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
           const isOverWip = col.wipLimit && columnTasks.length > col.wipLimit
           const isAtWip = col.wipLimit && columnTasks.length === col.wipLimit
 
+          // Per-column selection state for visible Select All checkbox
+          const allSelected = columnTasks.length > 0 && isTaskSelected && columnTasks.every(t => isTaskSelected(t.id))
+          const someSelected = !allSelected && columnTasks.length > 0 && isTaskSelected && columnTasks.some(t => isTaskSelected(t.id))
+
           return (
             <div
               key={col.key}
@@ -905,6 +919,44 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
                   )}
                 </div>
                 <div className="flex items-center gap-1.5">
+                  {/* Per-column Select All checkbox — visible toggle */}
+                  {!collapsedColumns[col.key] && columnTasks.length > 0 && onToggleTaskSelect && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (allSelected) {
+                          deselectAllInColumn(columnTasks)
+                        } else {
+                          selectAllInColumn(columnTasks)
+                        }
+                      }}
+                      className={`p-0.5 rounded transition-colors ${
+                        allSelected
+                          ? 'text-accent-blue hover:text-accent-blue/70'
+                          : someSelected
+                            ? 'text-accent-blue/60 hover:text-accent-blue'
+                            : 'text-gray-600 hover:text-gray-400'
+                      }`}
+                      title={allSelected ? `Deselect all in ${col.label}` : `Select all ${columnTasks.length} in ${col.label}`}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        {allSelected ? (
+                          <>
+                            <rect x="3" y="3" width="18" height="18" rx="3" fill="currentColor" opacity="0.2"/>
+                            <rect x="3" y="3" width="18" height="18" rx="3"/>
+                            <polyline points="7 13 10 16 17 8"/>
+                          </>
+                        ) : someSelected ? (
+                          <>
+                            <rect x="3" y="3" width="18" height="18" rx="3"/>
+                            <line x1="8" y1="12" x2="16" y2="12"/>
+                          </>
+                        ) : (
+                          <rect x="3" y="3" width="18" height="18" rx="3"/>
+                        )}
+                      </svg>
+                    </button>
+                  )}
                   <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
                     isOverWip
                       ? 'bg-red-500/15 text-red-400 border border-red-500/30'

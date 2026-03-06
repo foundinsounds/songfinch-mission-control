@@ -1,8 +1,10 @@
 // Agent Chat API — Real AI-powered conversations with individual agents and the Council
 // POST: Send a message, get an AI response from the target agent
+// Now supports REAL actions: agents can move tasks, reassign, create, and change priority
 
 import { getAgents, addActivity, getTasks } from '../../../../lib/airtable'
 import { callAI } from '../../../../lib/ai'
+import { parseActions, executeActions, ACTION_DEFINITIONS } from '../../../../lib/chat-actions'
 import { NextResponse } from 'next/server'
 import { safeJsonParse, badRequest } from '../../../../lib/api-utils'
 
@@ -23,15 +25,23 @@ When responding as the Council, speak as a unified leadership voice. Reference r
 - CHIEF (Quality Director) — reviews, quality scoring, approval workflow
 - CMO (Marketing Director) — campaign planning, task orchestration, strategy
 
-Be concise but insightful. You have full context on the pipeline and can discuss strategy, priorities, agent performance, and content direction. Keep responses under 200 words unless the topic warrants more detail.`
+Be concise but insightful. You have full context on the pipeline and can discuss strategy, priorities, agent performance, and content direction. Keep responses under 200 words unless the topic warrants more detail.
+
+${ACTION_DEFINITIONS}`
 
 // Channel-specific system prompts for group channels
 const CHANNEL_PROMPTS = {
-  creative: `You are facilitating the Creative channel of the Songfinch agent council. This channel focuses on creative ideation, brand voice discussions, and content quality. Respond as the creative leadership. Keep responses focused on creative topics — brand voice, emotional storytelling, visual direction, and campaign concepts. Be concise (under 150 words).`,
+  creative: `You are facilitating the Creative channel of the Songfinch agent council. This channel focuses on creative ideation, brand voice discussions, and content quality. Respond as the creative leadership. Keep responses focused on creative topics — brand voice, emotional storytelling, visual direction, and campaign concepts. Be concise (under 150 words).
 
-  strategy: `You are facilitating the Strategy channel of the Songfinch agent council. This channel focuses on marketing strategy, campaign planning, analytics, and competitive positioning. Respond with strategic insight about content pipelines, audience targeting, and growth tactics. Be concise (under 150 words).`,
+${ACTION_DEFINITIONS}`,
 
-  alerts: `You are the Songfinch system alerts channel. Provide brief status updates about the pipeline, agent health, task bottlenecks, or system issues. Be extremely concise — technical and operational only.`,
+  strategy: `You are facilitating the Strategy channel of the Songfinch agent council. This channel focuses on marketing strategy, campaign planning, analytics, and competitive positioning. Respond with strategic insight about content pipelines, audience targeting, and growth tactics. Be concise (under 150 words).
+
+${ACTION_DEFINITIONS}`,
+
+  alerts: `You are the Songfinch system alerts channel. Provide brief status updates about the pipeline, agent health, task bottlenecks, or system issues. Be extremely concise — technical and operational only.
+
+${ACTION_DEFINITIONS}`,
 }
 
 export async function POST(request) {
@@ -104,22 +114,31 @@ export async function POST(request) {
       maxRetries: 1, // Chat should be fast — fewer retries
     })
 
+    // ── Parse and execute any actions in the AI response ──
+    const { cleanText, actions } = parseActions(aiResponse)
+    let actionResults = []
+
+    if (actions.length > 0) {
+      actionResults = await executeActions(actions, { respondingAs })
+    }
+
     // Log to activity feed for audit trail
     await addActivity({
       'Agent': respondingAs === 'Council' ? 'Council' : respondingAs,
-      'Action': 'chat-response',
+      'Action': actions.length > 0 ? 'chat-action' : 'chat-response',
       'Task': agentName ? `DM with user` : `${channel || 'council'} channel`,
-      'Details': `User asked: "${message.slice(0, 80)}${message.length > 80 ? '...' : ''}" → Responded (${aiResponse.length} chars)`,
-      'Type': 'Comment',
+      'Details': `User: "${message.slice(0, 80)}${message.length > 80 ? '...' : ''}"${actions.length > 0 ? ` | ${actions.length} action(s) executed` : ''}`,
+      'Type': actions.length > 0 ? 'Status Changed' : 'Comment',
     }).catch(err => console.warn('[CHAT] Activity log failed:', err.message))
 
     return NextResponse.json({
-      message: aiResponse,
+      message: cleanText,
       sender: respondingAs,
       senderEmoji: respondingEmoji,
       senderColor: respondingColor,
       model,
       timestamp: new Date().toISOString(),
+      actions: actionResults,
     })
 
   } catch (err) {
@@ -151,28 +170,29 @@ export async function POST(request) {
 
 /**
  * Build a chat-specific system prompt for an agent.
- * Uses their base system prompt but adds conversational framing.
+ * Uses their base system prompt but adds conversational framing and action capabilities.
  */
 function buildAgentChatPrompt(agent) {
   const basePrompt = agent.systemPrompt || `You are ${agent.name}, the ${agent.role} for Songfinch.`
 
   return `${basePrompt}
 
-You are now in a direct chat conversation with the human operator of the Songfinch Mission Control dashboard. This is a real-time conversation, not a task execution.
+You are now in a direct chat conversation with the human operator of the Songfinch Mission Control dashboard.
 
 Chat guidelines:
 - Be conversational but professional. You ARE ${agent.name} (${agent.emoji}).
 - Share your perspective based on your role as ${agent.role}.
 - If asked about tasks or pipeline status, reference your current workload.
-- If given instructions or feedback, acknowledge them clearly.
+- If given instructions or feedback, acknowledge them and take action using the action tags below.
 - Keep responses concise (under 200 words) unless the topic requires detail.
 - You can express opinions, make suggestions, and even respectfully push back if you disagree.
-- Reference your specialty and how it connects to the broader Songfinch mission.`
+- Reference your specialty and how it connects to the broader Songfinch mission.
+
+${ACTION_DEFINITIONS}`
 }
 
 /**
- * Fetch lightweight pipeline context so agents can reference current state.
- * Keeps it minimal to avoid token bloat.
+ * Fetch detailed pipeline context so agents can reference current state and take actions.
  */
 async function getPipelineContext() {
   try {
@@ -187,8 +207,17 @@ async function getPipelineContext() {
     const totalActive = (byStatus['In Progress'] || 0) + (byStatus['Assigned'] || 0)
     const totalInbox = byStatus['Inbox'] || 0
     const totalReview = byStatus['Review'] || 0
+    const totalRevisit = byStatus['Revisit'] || 0
 
-    return `[Pipeline context: ${tasks.length} total tasks | ${totalDone} done | ${totalActive} active | ${totalInbox} inbox | ${totalReview} in review]`
+    // Include recent active task names for action context
+    const activeTasks = tasks
+      .filter(t => t.status !== 'Done')
+      .slice(0, 20)
+      .map(t => `- "${t.name}" [${t.status}]${t.agent ? ` (${t.agent})` : ''} [${t.priority}]`)
+      .join('\n')
+
+    return `[Pipeline: ${tasks.length} total | ${totalDone} done | ${totalActive} active | ${totalInbox} inbox | ${totalReview} review | ${totalRevisit} revisit]
+Active tasks:\n${activeTasks || '(none)'}`
   } catch {
     return '[Pipeline context unavailable]'
   }

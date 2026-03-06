@@ -86,6 +86,7 @@ export default function Roundtable() {
   const [feedCollapsed, setFeedCollapsed] = useState(false)
   const [planningCampaign, setPlanningCampaign] = useState(false)
   const [mobileSidebar, setMobileSidebar] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileFeed, setMobileFeed] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showBatchCreate, setShowBatchCreate] = useState(false)
@@ -449,6 +450,8 @@ export default function Roundtable() {
             onSelectAgent={(name) => { setSelectedAgent(selectedAgent === name ? null : name); setMobileSidebar(false) }}
             onConfigAgent={(agent) => { setConfigAgent(agent); setMobileSidebar(false) }}
             tasks={tasks}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(prev => !prev)}
           />
         </div>
 
@@ -810,7 +813,7 @@ export default function Roundtable() {
       )}
 
       {/* Agent Chat */}
-      <AgentChat agents={agents} isOpen={showChat} onClose={() => setShowChat(false)} onOpen={() => setShowChat(true)} />
+      <AgentChat agents={agents} isOpen={showChat} onClose={() => setShowChat(false)} onOpen={() => setShowChat(true)} onDataRefresh={fetchData} />
 
       {/* Command Bar */}
       <CommandBar
