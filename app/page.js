@@ -58,8 +58,11 @@ import TaskContextMenu from '../components/TaskContextMenu'
 import FocusMode from '../components/FocusMode'
 import ProductivityScore from '../components/ProductivityScore'
 import { useURLState } from '../lib/useURLState'
+import { useKeyboardNavigation } from '../lib/useKeyboardNavigation'
+import { useTaskSearch } from '../lib/useTaskSearch'
+import { useCommandHandler } from '../lib/useCommandHandler'
+import { useDataFetching } from '../lib/useDataFetching'
 import { playApproveSound, playCompleteSound, playErrorSound, playCreateSound, playDropSound, playStatusChangeSound } from '../lib/sounds'
-import { checkEscalations } from '../lib/escalation'
 import { fireConfetti } from '../lib/confetti'
 import { useToast } from '../components/ToastProvider'
 
@@ -74,8 +77,7 @@ export default function Roundtable() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [feedFilter, setFeedFilter] = useState('All')
   const [dataSource, setDataSource] = useState('loading')
-  const [lastSync, setLastSync] = useState(null)
-  const [isSyncing, setIsSyncing] = useState(false)
+  // lastSync and isSyncing state moved to useDataFetching hook
   const [runningAgents, setRunningAgents] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showCommandBar, setShowCommandBar] = useState(false)
@@ -149,123 +151,15 @@ export default function Roundtable() {
     })
   }, [])
 
-  // Fetch live data from Airtable
-  const fetchData = useCallback(async () => {
-    // Skip polling when tab is hidden to save API calls
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
-
-    setIsSyncing(true)
-    try {
-      const res = await fetch('/api/data')
-      if (!res.ok) throw new Error('API error')
-      const data = await res.json()
-
-      if (data.agents && data.agents.length > 0) {
-        // Merge: Airtable agents + any fallback agents not in Airtable
-        const airtableNames = new Set(data.agents.map(a => a.name))
-        const missing = FALLBACK_AGENTS.filter(a => !airtableNames.has(a.name))
-        setAgents([...data.agents, ...missing])
-      }
-
-      // Always accept the Airtable tasks — even if empty.
-      // Only fall back to mock data on network / API errors (catch block).
-      if (data.tasks) {
-        if (data.tasks.length > 0) {
-          setTasks(checkEscalations(data.tasks))
-          setDataSource('airtable')
-        } else {
-          setTasks([])
-          setDataSource('airtable-empty')
-        }
-      }
-
-      if (data.activity && data.activity.length > 0) {
-        setActivity(data.activity)
-      }
-
-      setLastSync(new Date())
-    } catch (err) {
-      console.warn('Airtable fetch failed, using mock data:', err.message)
-      setDataSource('mock')
-    } finally {
-      setIsSyncing(false)
-    }
-  }, [])
-
-  // Read settings from localStorage
-  const getSettings = useCallback(() => {
-    if (typeof window === 'undefined') return { autoRunAgents: true, runInterval: 15, pollInterval: 10 }
-    try {
-      const saved = localStorage.getItem('roundtable-settings')
-      if (saved) return { autoRunAgents: true, runInterval: 15, pollInterval: 10, ...JSON.parse(saved) }
-    } catch {}
-    return { autoRunAgents: true, runInterval: 15, pollInterval: 10 }
-  }, [])
-
-  // Initial fetch + visibility-aware auto-polling
-  useEffect(() => {
-    fetchData()
-
-    let poller = null
-
-    function startPolling() {
-      stopPolling()
-      if (autoRefreshInterval > 0) {
-        poller = setInterval(fetchData, autoRefreshInterval)
-      }
-    }
-
-    function stopPolling() {
-      if (poller) {
-        clearInterval(poller)
-        poller = null
-      }
-    }
-
-    function handleVisibilityChange() {
-      if (document.visibilityState === 'hidden') {
-        stopPolling()
-      } else {
-        // Refresh immediately when tab becomes visible, then resume polling
-        fetchData()
-        startPolling()
-      }
-    }
-
-    startPolling()
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    return () => {
-      stopPolling()
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }, [fetchData, autoRefreshInterval])
-
-  // Auto-run agents on configured interval
-  useEffect(() => {
-    function checkAndRun() {
-      const settings = getSettings()
-      if (!settings.autoRunAgents) return
-
-      // Run agents automatically
-      fetch('/api/cron/run-agents')
-        .then(res => res.json())
-        .then(data => {
-          setTimeout(fetchData, 2000)
-        })
-        .catch(err => console.error('[Roundtable] Auto-run failed:', err))
-    }
-
-    const settings = getSettings()
-    if (!settings.autoRunAgents) return
-
-    // Run immediately on enable, then on interval
-    checkAndRun()
-    const intervalMs = (settings.runInterval || 60) * 60 * 1000
-    const runner = setInterval(checkAndRun, intervalMs)
-    return () => clearInterval(runner)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getSettings, fetchData, settingsRev])
+  // Data fetching, polling, and auto-run (extracted to hook)
+  const { fetchData, getSettings, lastSync, isSyncing } = useDataFetching({
+    setAgents,
+    setTasks,
+    setActivity,
+    setDataSource,
+    autoRefreshInterval,
+    settingsRev,
+  })
 
   // Clock
   useEffect(() => {
@@ -474,320 +368,46 @@ export default function Roundtable() {
     }
   }, [handleRunAgents, handlePlanCampaign])
 
-  // ? key opens shortcut cheatsheet
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
-      if (e.key === '?') {
-        e.preventDefault()
-        setShowShortcuts(s => !s)
-      }
-      if (e.key === 'b' && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault()
-        setShowBatchCreate(s => !s)
-        showToast('⌨ B → Batch create', 'info')
-      }
-      if (e.key === 'm' && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault()
-        setShowMetrics(s => !s)
-        showToast('⌨ M → Agent metrics', 'info')
-      }
-      if (e.key === 'c' && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault()
-        setShowComparison(s => !s)
-        showToast('⌨ C → Agent comparison', 'info')
-      }
-      if (e.key === 'g' && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault()
-        setShowCalendarHeatmap(s => !s)
-        showToast('⌨ G → Content calendar heatmap', 'info')
-      }
-      if (e.key === 'n' && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault()
-        setShowQuickCreate(s => !s)
-        showToast('⌨ N → Quick create', 'info')
-      }
-      if (e.key === 'y' && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault()
-        setShowTimeline(s => !s)
-        showToast('⌨ Y → Agent timeline', 'info')
-      }
-      if (e.key === 'F' && !e.metaKey && !e.ctrlKey && e.shiftKey) {
-        e.preventDefault()
-        setFocusModeActive(s => !s)
-        showToast('⌨ Shift+F → Focus mode', 'info')
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [])
+  // Keyboard navigation — global hotkeys + task j/k/h/l/Enter/Escape (extracted to hook)
+  const { navigableTasks } = useKeyboardNavigation({
+    tasks,
+    focusedTaskId,
+    selectedTask,
+    showCommandBar,
+    showSettings,
+    showChat,
+    currentView,
+    setFocusedTaskId,
+    setSelectedTask,
+    setShowShortcuts,
+    setShowBatchCreate,
+    setShowMetrics,
+    setShowComparison,
+    setShowCalendarHeatmap,
+    setShowQuickCreate,
+    setShowTimeline,
+    setFocusModeActive,
+    toggleSelect,
+    handleApproveTask,
+    handleUpdateTaskStatus,
+    showToast,
+  })
 
-  // Flattened task list for keyboard navigation (column by column, left to right)
-  const navigableTasks = useMemo(() => {
-    const columnOrder = ['Inbox', 'Assigned', 'In Progress', 'Review', 'Done']
-    const flat = []
-    columnOrder.forEach(col => {
-      tasks.filter(t => t.status === col).forEach(t => flat.push(t))
-    })
-    return flat
-  }, [tasks])
+  // Command Bar handler (extracted to hook)
+  const handleCommand = useCommandHandler({
+    setCurrentView,
+    setShowCommandBar,
+    setShowChat,
+    setShowSettings,
+    setSelectedTask,
+    handleRunAgents,
+    handleCreateTask,
+    fetchData,
+    tasks,
+  })
 
-  // j/k/Enter/Escape keyboard navigation
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
-      if (selectedTask || showCommandBar || showSettings || showChat) return
-
-      if (currentView !== 'kanban' && currentView !== 'list') return
-
-      if (e.key === 'j' || e.key === 'ArrowDown') {
-        e.preventDefault()
-        if (navigableTasks.length === 0) return
-        setFocusedTaskId(prev => {
-          if (!prev) return navigableTasks[0]?.id || null
-          const idx = navigableTasks.findIndex(t => t.id === prev)
-          const next = Math.min(idx + 1, navigableTasks.length - 1)
-          return navigableTasks[next]?.id || prev
-        })
-      }
-      if (e.key === 'k' || e.key === 'ArrowUp') {
-        e.preventDefault()
-        if (navigableTasks.length === 0) return
-        setFocusedTaskId(prev => {
-          if (!prev) return navigableTasks[navigableTasks.length - 1]?.id || null
-          const idx = navigableTasks.findIndex(t => t.id === prev)
-          const next = Math.max(idx - 1, 0)
-          return navigableTasks[next]?.id || prev
-        })
-      }
-      if (e.key === 'Enter' && focusedTaskId) {
-        e.preventDefault()
-        const task = navigableTasks.find(t => t.id === focusedTaskId)
-        if (task) setSelectedTask(task)
-      }
-      if (e.key === 'Escape') {
-        setFocusedTaskId(null)
-      }
-      // x to toggle selection on focused task
-      if (e.key === 'x' && focusedTaskId) {
-        e.preventDefault()
-        toggleSelect(focusedTaskId)
-        showToast('⌨ X → Toggled selection', 'info')
-      }
-      // a to approve focused task (if in Review)
-      if (e.key === 'a' && focusedTaskId) {
-        const task = navigableTasks.find(t => t.id === focusedTaskId)
-        if (task && task.status === 'Review') {
-          e.preventDefault()
-          handleApproveTask(task)
-          showToast('⌨ A → Approved task', 'success')
-        }
-      }
-      // h/l/]/[ or ArrowLeft/ArrowRight to cycle focused task between statuses
-      if ((e.key === 'l' || e.key === ']' || e.key === 'ArrowRight') && focusedTaskId) {
-        const task = navigableTasks.find(t => t.id === focusedTaskId)
-        if (task) {
-          const statusOrder = ['Inbox', 'Assigned', 'In Progress', 'Review', 'Done']
-          const idx = statusOrder.indexOf(task.status)
-          if (idx < statusOrder.length - 1) {
-            e.preventDefault()
-            handleUpdateTaskStatus(task, statusOrder[idx + 1])
-            showToast(`⌨ → Moved to ${statusOrder[idx + 1]}`, 'info')
-          }
-        }
-      }
-      if ((e.key === 'h' || e.key === '[' || (e.key === 'ArrowLeft' && !e.metaKey)) && focusedTaskId) {
-        const task = navigableTasks.find(t => t.id === focusedTaskId)
-        if (task) {
-          const statusOrder = ['Inbox', 'Assigned', 'In Progress', 'Review', 'Done']
-          const idx = statusOrder.indexOf(task.status)
-          if (idx > 0) {
-            e.preventDefault()
-            handleUpdateTaskStatus(task, statusOrder[idx - 1])
-            showToast(`⌨ ← Moved to ${statusOrder[idx - 1]}`, 'info')
-          }
-        }
-      }
-      // d to quickly mark focused task as Done
-      if (e.key === 'd' && focusedTaskId && !e.metaKey && !e.ctrlKey) {
-        const task = navigableTasks.find(t => t.id === focusedTaskId)
-        if (task && task.status !== 'Done') {
-          e.preventDefault()
-          handleUpdateTaskStatus(task, 'Done')
-          showToast('⌨ D → Marked as Done', 'success')
-        }
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [navigableTasks, focusedTaskId, selectedTask, showCommandBar, showSettings, showChat, currentView, toggleSelect])
-
-  // Command Bar handler
-  const handleCommand = useCallback((command, entity) => {
-    switch (command) {
-      case 'open-command-bar':
-        setShowCommandBar(true)
-        break
-      case 'run-agents':
-        handleRunAgents()
-        break
-      case 'view-kanban':
-        setCurrentView('kanban')
-        break
-      case 'view-list':
-        setCurrentView('list')
-        break
-      case 'view-workflow':
-        setCurrentView('workflow')
-        break
-      case 'view-agents':
-        setCurrentView('agents')
-        break
-      case 'view-content':
-        setCurrentView('content')
-        break
-      case 'view-analytics':
-        setCurrentView('analytics')
-        break
-      case 'view-inbox':
-        setCurrentView('inbox')
-        break
-      case 'view-calendar':
-        setCurrentView('calendar')
-        break
-      case 'view-campaigns':
-        setCurrentView('campaigns')
-        break
-      case 'view-approvals':
-        setCurrentView('approvals')
-        break
-      case 'view-templates':
-        setCurrentView('templates')
-        break
-      case 'view-scoring':
-        setCurrentView('scoring')
-        break
-      case 'view-skills':
-        setCurrentView('skills')
-        break
-      case 'view-batch':
-        setCurrentView('batch')
-        break
-      case 'view-intelligence':
-        setCurrentView('intelligence')
-        break
-      case 'view-webhooks':
-        setCurrentView('webhooks')
-        break
-      case 'view-abtests':
-        setCurrentView('abtests')
-        break
-      case 'toggle-chat':
-        setShowChat(c => !c)
-        break
-      case 'settings':
-        setShowSettings(true)
-        break
-      case 'refresh':
-        fetchData()
-        break
-      case 'filter-review':
-        setCurrentView('list')
-        // Select review tasks by filtering
-        break
-      case 'filter-done':
-        setCurrentView('list')
-        break
-      case 'open-task':
-        if (entity) {
-          const task = tasks.find(t => t.id === entity)
-          if (task) setSelectedTask(task)
-        }
-        break
-      case 'create-task':
-        // Command bar task creation — create task with entity as name
-        if (entity) {
-          handleCreateTask({ name: entity, status: 'Inbox', priority: 'Medium' })
-        }
-        break
-      default:
-        break
-    }
-  }, [handleRunAgents, handleCreateTask, fetchData, tasks])
-
-  // Search filter + quick filters across all task fields
-  const filteredTasks = useMemo(() => {
-    let result = tasks
-
-    // Apply quick filters first
-    const { priorities, agents: agentFilters, contentTypes, statuses } = quickFilters
-    if (priorities?.length > 0) {
-      result = result.filter(t => priorities.includes(t.priority))
-    }
-    if (agentFilters?.length > 0) {
-      result = result.filter(t => t.agent && agentFilters.includes(t.agent))
-    }
-    if (contentTypes?.length > 0) {
-      result = result.filter(t => t.contentType && contentTypes.includes(t.contentType))
-    }
-    if (statuses?.length > 0) {
-      result = result.filter(t => t.status && statuses.includes(t.status))
-    }
-
-    // Fuzzy search — token-based scoring with typo tolerance
-    if (searchQuery && searchQuery.trim().length > 0) {
-      const rawQ = searchQuery.trim().toLowerCase()
-      const tokens = rawQ.split(/\s+/).filter(Boolean)
-
-      // Character-sequence fuzzy match: do all chars of pattern appear in order in str?
-      const fuzzyMatch = (str, pattern) => {
-        let si = 0, pi = 0
-        while (si < str.length && pi < pattern.length) {
-          if (str[si] === pattern[pi]) pi++
-          si++
-        }
-        return pi === pattern.length
-      }
-
-      // Score a single token against a single field value (0 = no match)
-      const scoreToken = (field, token) => {
-        if (!field) return 0
-        const f = field.toLowerCase()
-        if (f === token) return 100          // exact field match
-        if (f.startsWith(token)) return 80   // starts with
-        if (f.includes(token)) return 60     // substring
-        if (token.length >= 2 && fuzzyMatch(f, token)) return 30 // fuzzy sequence
-        return 0
-      }
-
-      // Score a task: sum of best-field scores per token
-      const scoreTask = (t) => {
-        const fields = [
-          t.name, t.description, t.agent, t.status,
-          t.priority, t.contentType, t.campaign, t.platform,
-          ...(t.tags || [])
-        ]
-        let total = 0
-        for (const token of tokens) {
-          let best = 0
-          for (const f of fields) {
-            const s = scoreToken(f, token)
-            if (s > best) best = s
-          }
-          if (best === 0) return 0 // all tokens must match something
-          total += best
-        }
-        return total
-      }
-
-      const scored = result.map(t => ({ task: t, score: scoreTask(t) }))
-        .filter(s => s.score > 0)
-        .sort((a, b) => b.score - a.score)
-      result = scored.map(s => s.task)
-    }
-
-    return result
-  }, [tasks, searchQuery, quickFilters])
+  // Search filter + quick filters (extracted to hook)
+  const filteredTasks = useTaskSearch(tasks, searchQuery, quickFilters)
 
   // Generate pseudo-historical sparkline trends from current task data
   const generateSparkTrend = useCallback((current, seed = 0, volatility = 0.35) => {
