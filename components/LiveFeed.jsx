@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { AGENTS } from '../lib/agents'
+import { useVisibilityPolling } from '../lib/useVisibilityPolling'
 
 function timeAgo(dateStr) {
   const date = new Date(dateStr)
@@ -82,11 +83,8 @@ export default function LiveFeed({ activity, filter, onFilterChange, collapsed, 
   const [seenIds, setSeenIds] = useState(new Set())
   const prevCountRef = useRef(activity.length)
 
-  // Auto-update relative times every 30s
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30000)
-    return () => clearInterval(timer)
-  }, [])
+  // Auto-update relative times every 30s — pauses when tab is hidden
+  useVisibilityPolling(useCallback(() => setNow(Date.now()), []), 30_000)
 
   // Track new items for animation
   useEffect(() => {
