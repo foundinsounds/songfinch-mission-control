@@ -97,6 +97,7 @@ export default function QuickCreateFAB({ onCreateTask, agents = [] }) {
                 value={form.name}
                 onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="Task name..."
+                aria-label="Task name"
                 className="w-full px-3 py-2 bg-dark-800 border border-dark-500 rounded-lg text-[12px] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-accent-orange/40 transition-colors"
                 autoFocus
               />
@@ -109,6 +110,7 @@ export default function QuickCreateFAB({ onCreateTask, agents = [] }) {
                     value={form.description}
                     onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))}
                     placeholder="Description (optional)..."
+                    aria-label="Task description"
                     rows={2}
                     className="w-full px-3 py-2 bg-dark-800 border border-dark-500 rounded-lg text-[11px] text-gray-300 placeholder-gray-600 focus:outline-none focus:border-accent-orange/40 transition-colors resize-none"
                   />
@@ -118,6 +120,7 @@ export default function QuickCreateFAB({ onCreateTask, agents = [] }) {
                     <select
                       value={form.contentType}
                       onChange={(e) => setForm(f => ({ ...f, contentType: e.target.value }))}
+                      aria-label="Content type"
                       className="flex-1 px-2 py-1.5 bg-dark-800 border border-dark-500 rounded-lg text-[11px] text-gray-400 focus:outline-none cursor-pointer"
                     >
                       <option value="">Type</option>
@@ -126,6 +129,7 @@ export default function QuickCreateFAB({ onCreateTask, agents = [] }) {
                     <select
                       value={form.priority}
                       onChange={(e) => setForm(f => ({ ...f, priority: e.target.value }))}
+                      aria-label="Priority"
                       className="flex-1 px-2 py-1.5 bg-dark-800 border border-dark-500 rounded-lg text-[11px] text-gray-400 focus:outline-none cursor-pointer"
                     >
                       {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
@@ -136,6 +140,7 @@ export default function QuickCreateFAB({ onCreateTask, agents = [] }) {
                   <select
                     value={form.agent}
                     onChange={(e) => setForm(f => ({ ...f, agent: e.target.value }))}
+                    aria-label="Assign to agent"
                     className="w-full px-2 py-1.5 bg-dark-800 border border-dark-500 rounded-lg text-[11px] text-gray-400 focus:outline-none cursor-pointer"
                   >
                     <option value="">Assign to agent (optional)</option>

@@ -142,7 +142,7 @@ export default function BatchCreateModal({ isOpen, onClose, onCreateTask }) {
   const validRows = parsedRows.filter(r => r.valid)
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="batch-create-title">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
@@ -153,12 +153,12 @@ export default function BatchCreateModal({ isOpen, onClose, onCreateTask }) {
           <div className="flex items-center gap-2.5">
             <span className="text-lg">📋</span>
             <div>
-              <h2 className="text-sm font-semibold text-gray-200">Batch Create Tasks</h2>
+              <h2 id="batch-create-title" className="text-sm font-semibold text-gray-200">Batch Create Tasks</h2>
               <p className="text-[10px] text-gray-500 mt-0.5">Paste CSV or tab-separated data to create multiple tasks</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-600 hover:text-gray-300 transition-colors p-1">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <button onClick={onClose} className="text-gray-600 hover:text-gray-300 transition-colors p-1" aria-label="Close batch create modal">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>

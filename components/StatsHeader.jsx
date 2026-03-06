@@ -212,7 +212,7 @@ export default function StatsHeader({ data = {}, sync = {}, actions = {}, panels
       <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
         {/* Mobile hamburger */}
         {onToggleSidebar && (
-          <button onClick={onToggleSidebar} className="md:hidden header-btn p-1.5 rounded" title="Toggle agents sidebar">
+          <button onClick={onToggleSidebar} className="md:hidden header-btn p-1.5 rounded" title="Toggle agents sidebar" aria-label="Toggle agents sidebar">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
             </svg>
@@ -235,7 +235,7 @@ export default function StatsHeader({ data = {}, sync = {}, actions = {}, panels
       {/* Center: Compact Stats with Sparklines */}
       <div className="hidden sm:flex items-center gap-3 lg:gap-5">
         <div className="flex items-center gap-1.5 animate-stat-count">
-          <div className="w-1.5 h-1.5 rounded-full bg-accent-green pulse-dot" />
+          <div className="w-1.5 h-1.5 rounded-full bg-accent-green pulse-dot" aria-hidden="true" />
           <span className="text-sm font-bold">{stats.agentsActive}</span>
           <span className="text-[9px] text-gray-500 uppercase">online</span>
         </div>

@@ -54,6 +54,7 @@ const CopyButton = memo(function CopyButton({
       <button
         onClick={handleCopy}
         title={copied ? 'Copied!' : label}
+        aria-label={copied ? 'Copied!' : label}
         className={`p-1 rounded transition-all ${
           copied
             ? 'text-accent-green bg-accent-green/10'

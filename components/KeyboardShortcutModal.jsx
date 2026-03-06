@@ -79,7 +79,7 @@ export default function KeyboardShortcutModal({ isOpen, onClose }) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
@@ -95,15 +95,16 @@ export default function KeyboardShortcutModal({ isOpen, onClose }) {
               </svg>
             </div>
             <div>
-              <h2 className="text-sm font-bold text-gray-100">Keyboard Shortcuts</h2>
+              <h2 id="shortcuts-title" className="text-sm font-bold text-gray-100">Keyboard Shortcuts</h2>
               <p className="text-[10px] text-gray-500">Press <kbd className="px-1 py-0.5 bg-dark-600 rounded text-[9px] text-gray-400 font-mono">?</kbd> to toggle this panel</p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-300 p-1 rounded-lg hover:bg-dark-600 transition-colors"
+            aria-label="Close keyboard shortcuts"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
