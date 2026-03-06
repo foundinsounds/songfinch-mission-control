@@ -374,7 +374,7 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
     <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-label={`Task details: ${task.name}`}>
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/60 backdrop-blur-md"
         onClick={onClose}
         aria-hidden="true"
       />

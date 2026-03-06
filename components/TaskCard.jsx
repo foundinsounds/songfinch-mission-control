@@ -439,7 +439,7 @@ function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChang
 
         {/* Relative time stamp */}
         {relativeTime && (
-          <span className="text-[8px] text-gray-600 font-mono tabular-nums shrink-0" title={exactDateTooltip}>
+          <span className="text-[8px] text-gray-500 font-mono tabular-nums shrink-0" title={exactDateTooltip}>
             {relativeTime}
           </span>
         )}
@@ -525,7 +525,7 @@ function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChang
 
         {/* Relative time stamp */}
         {relativeTime && (
-          <span className="text-[8px] text-gray-600 font-mono tabular-nums shrink-0" title={exactDateTooltip}>
+          <span className="text-[8px] text-gray-500 font-mono tabular-nums shrink-0" title={exactDateTooltip}>
             {relativeTime}
           </span>
         )}
@@ -571,7 +571,7 @@ function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChang
           className={`absolute top-2 left-2 w-4.5 h-4.5 rounded border flex items-center justify-center transition-all z-10 ${
             isSelected
               ? 'bg-accent-orange border-accent-orange text-white'
-              : 'border-dark-400 bg-dark-700 opacity-0 group-hover:opacity-100 hover:border-gray-400'
+              : 'border-dark-400 bg-dark-700 opacity-40 group-hover:opacity-100 hover:border-gray-400'
           } ${checkboxAnimating ? 'animate-checkbox-pop' : ''}`}
           style={{ width: 18, height: 18 }}
         >
@@ -690,7 +690,7 @@ function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChang
           <TaskTimeInline task={task} />
           {/* Relative time (full density) */}
           {relativeTime && (
-            <span className="text-[8px] text-gray-600 font-mono tabular-nums shrink-0" title={exactDateTooltip}>
+            <span className="text-[8px] text-gray-500 font-mono tabular-nums shrink-0" title={exactDateTooltip}>
               {relativeTime}
             </span>
           )}

@@ -65,7 +65,16 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* ===== LIGHT THEME OVERRIDES ===== */
+/* ===== LIGHT THEME OVERRIDES =====
+ * Architecture note: !important is required here because Tailwind utility classes
+ * (e.g. .bg-dark-700) are generated with flat specificity. The [data-theme] attribute
+ * selector alone can't override them without !important. The proper fix is migrating
+ * all components to use CSS custom properties (var(--bg-card)) instead of hardcoded
+ * Tailwind dark-* classes — tracked as a future refactor.
+ *
+ * Core mapping: dark-900 → bg-primary, dark-800 → bg-secondary, dark-700 → bg-card,
+ *               dark-600 → bg-hover, dark-500 → border
+ */
 [data-theme="light"] body {
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -792,6 +801,24 @@ select option {
   box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.3);
 }
 
+/* Global focus-visible ring — applies to all interactive elements for keyboard a11y */
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid rgba(249, 115, 22, 0.5);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* Exception: task cards already have their own focus-visible styles */
+.task-card:focus-visible,
+.compact-card-hover:focus-visible {
+  outline: none;
+}
+
 /* Fade in animation for modals */
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -921,8 +948,30 @@ select option {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
     z-index: 40;
     animation: fadeIn 0.15s ease-out;
+    cursor: pointer;
+  }
+  /* Close hint for mobile overlays — visible tap target */
+  .mobile-sidebar-overlay::after {
+    content: '✕';
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    line-height: 32px;
+    text-align: center;
   }
 
   .mobile-sidebar {
@@ -1045,6 +1094,14 @@ select option {
 
 /* ===== MICRO-INTERACTION ANIMATIONS ===== */
 
+/* 0. Status transition — smooth color changes when tasks move between columns */
+.task-card {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease, background-color 0.3s ease;
+}
+.task-card .rounded-full {
+  transition: background-color 0.4s ease;
+}
+
 /* 1. Status badge pulse — "In Progress" badges gently oscillate opacity */
 @keyframes status-pulse {
   0%, 100% { opacity: 1; }
@@ -1129,12 +1186,13 @@ select option {
   background: rgba(249, 115, 22, 0.03) !important;
 }
 
-/* 8. Card drag shadow elevation */
+/* 8. Card drag shadow elevation — pure lift, no rotation for cleaner feel */
 .task-card-dragging {
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), 0 4px 12px rgba(0, 0, 0, 0.2) !important;
-  transform: rotate(1.5deg) scale(1.03) !important;
-  opacity: 0.9;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  transform: scale(1.02) !important;
+  opacity: 0.92;
   z-index: 100;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 /* Responsive grid adjustments */
@@ -1177,6 +1235,14 @@ body.focus-mode-active .kanban-board {
    Extends and reinforces the light theme with full coverage of all
    dark-* utility classes, text mappings, borders, shadows, scrollbars,
    and backdrop-blur adjustments.
+
+   NOTE: !important is intentional and required here. See architecture note at
+   the top of the "LIGHT THEME OVERRIDES" section (~line 68). All overrides use
+   CSS custom properties defined below for centralized value management, even
+   though !important is needed for specificity against Tailwind utilities.
+
+   FUTURE: Migrate components to use var(--lt-*) properties directly, which
+   would eliminate the need for these override rules entirely.
    ========================================================================== */
 
 /* ----- 1. Extended CSS Custom Properties ----- */
@@ -1209,63 +1275,64 @@ body.focus-mode-active .kanban-board {
 }
 
 /* ----- 2. Background Utility Overrides (dark-* → light equivalents) ----- */
+/* Uses --lt-* vars defined above for single-source-of-truth theming */
 [data-theme="light"] .bg-dark-900 {
-  background-color: #ffffff !important;
+  background-color: var(--lt-bg-white) !important;
 }
 [data-theme="light"] .bg-dark-800 {
-  background-color: #f9fafb !important;
+  background-color: var(--lt-bg-gray-50) !important;
 }
 [data-theme="light"] .bg-dark-700 {
-  background-color: #f3f4f6 !important;
+  background-color: var(--lt-bg-gray-100) !important;
 }
 [data-theme="light"] .bg-dark-600 {
-  background-color: #e5e7eb !important;
+  background-color: var(--lt-bg-gray-200) !important;
 }
 [data-theme="light"] .bg-dark-500 {
-  background-color: #d1d5db !important;
+  background-color: var(--lt-bg-gray-300) !important;
 }
 
 /* ----- 3. Text Color Overrides (light gray → dark gray) ----- */
 [data-theme="light"] .text-gray-100 {
-  color: #111827 !important;
+  color: var(--lt-text-900) !important;
 }
 [data-theme="light"] .text-gray-200 {
-  color: #1f2937 !important;
+  color: var(--lt-text-800) !important;
 }
 [data-theme="light"] .text-gray-300 {
-  color: #374151 !important;
+  color: var(--lt-text-700) !important;
 }
 [data-theme="light"] .text-gray-400 {
-  color: #4b5563 !important;
+  color: var(--lt-text-600) !important;
 }
 [data-theme="light"] .text-gray-500 {
-  color: #6b7280 !important;
+  color: var(--lt-text-500) !important;
 }
 [data-theme="light"] .text-gray-600 {
-  color: #9ca3af !important;
+  color: var(--lt-text-400) !important;
 }
 [data-theme="light"] .text-white {
-  color: #111827 !important;
+  color: var(--lt-text-900) !important;
 }
 
 /* ----- 4. Border Overrides ----- */
 [data-theme="light"] .border-dark-500 {
-  border-color: #d1d5db !important;
+  border-color: var(--lt-border-300) !important;
 }
 [data-theme="light"] .border-dark-600 {
-  border-color: #e5e7eb !important;
+  border-color: var(--lt-border-200) !important;
 }
 [data-theme="light"] .border-dark-700 {
-  border-color: #f3f4f6 !important;
+  border-color: var(--lt-bg-gray-100) !important;
 }
 [data-theme="light"] .border-dark-800 {
-  border-color: #f9fafb !important;
+  border-color: var(--lt-bg-gray-50) !important;
 }
 [data-theme="light"] .border-gray-700 {
-  border-color: #d1d5db !important;
+  border-color: var(--lt-border-300) !important;
 }
 [data-theme="light"] .border-gray-800 {
-  border-color: #e5e7eb !important;
+  border-color: var(--lt-border-200) !important;
 }
 [data-theme="light"] .border-white\/10 {
   border-color: rgba(0, 0, 0, 0.08) !important;

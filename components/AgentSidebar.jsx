@@ -184,7 +184,7 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onC
                 onDoubleClick={() => onConfigAgent && onConfigAgent(agent)}
                 className={`agent-item w-full px-4 py-2.5 flex items-center gap-3 text-left border-l-2 transition-all ${
                   isSelected
-                    ? 'border-l-white bg-dark-600'
+                    ? 'border-l-accent-orange bg-accent-orange/[0.08] shadow-[inset_0_0_20px_rgba(249,115,22,0.04)]'
                     : 'border-l-transparent hover:bg-dark-700'
                 }`}
                 title={`${agent.name} - ${agent.role} (double-click to configure)`}
@@ -207,7 +207,7 @@ export default function AgentSidebar({ agents, selectedAgent, onSelectAgent, onC
                 {/* Agent Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold truncate">{agent.name}</span>
+                    <span className={`text-sm font-semibold truncate ${isSelected ? 'text-accent-orange' : ''}`}>{agent.name}</span>
                     <span className={`status-badge px-1.5 py-0.5 rounded ${typeBadge.bg} ${typeBadge.text}`}>
                       {typeBadge.label}
                     </span>
