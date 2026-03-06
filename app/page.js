@@ -993,6 +993,7 @@ export default function Roundtable() {
           agent={configAgent}
           onClose={() => setConfigAgent(null)}
           onAgentUpdate={handleAgentUpdate}
+          tasks={tasks}
         />
       )}
 

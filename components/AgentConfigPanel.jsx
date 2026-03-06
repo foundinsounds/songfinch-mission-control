@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { MODEL_OPTIONS, AGENT_STATUSES, MODEL_LEGACY_MAP } from '../lib/constants'
+import { computeAgentMetrics } from '../lib/agentMetrics'
 
 // Improvement suggestions based on agent type
 const IMPROVEMENT_SUGGESTIONS = {
@@ -32,16 +33,6 @@ const IMPROVEMENT_SUGGESTIONS = {
   ],
 }
 
-// Performance metrics mock (would come from Airtable in production)
-function getAgentMetrics(agent) {
-  const baseMetrics = {
-    tasksThisWeek: Math.floor(Math.random() * 8) + 1,
-    avgCompletionTime: (Math.random() * 4 + 0.5).toFixed(1) + 'h',
-    qualityScore: Math.floor(Math.random() * 20) + 80,
-    outputWords: Math.floor(Math.random() * 5000) + 1000,
-  }
-  return baseMetrics
-}
 
 function ChevronIcon({ direction = 'right', size = 16 }) {
   const rotation = direction === 'down' ? 90 : direction === 'left' ? 180 : direction === 'up' ? 270 : 0
@@ -64,7 +55,7 @@ function BarChart({ value, max = 100, color = '#f97316' }) {
   )
 }
 
-export default function AgentConfigPanel({ agent, onClose, onAgentUpdate }) {
+export default function AgentConfigPanel({ agent, onClose, onAgentUpdate, tasks = [] }) {
   // Resolve legacy model values to current ones
   const resolvedModel = MODEL_LEGACY_MAP[agent.model] || agent.model || 'claude-sonnet-4-6'
   const [model, setModel] = useState(resolvedModel)
@@ -79,7 +70,7 @@ export default function AgentConfigPanel({ agent, onClose, onAgentUpdate }) {
   const [aiImprovements, setAiImprovements] = useState(null)
   const [suggestedPrompt, setSuggestedPrompt] = useState(null)
 
-  const metrics = useMemo(() => getAgentMetrics(agent), [agent.id])
+  const metrics = useMemo(() => computeAgentMetrics(tasks, agent.name), [tasks, agent.name])
   const improvements = IMPROVEMENT_SUGGESTIONS[agent.type] || IMPROVEMENT_SUGGESTIONS['SPC']
 
   // Close panel on Escape key press (WCAG dialog pattern)
@@ -278,7 +269,7 @@ export default function AgentConfigPanel({ agent, onClose, onAgentUpdate }) {
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Performance</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-dark-700 rounded-lg p-3 border border-dark-500">
-                    <div className="text-2xl font-bold" style={{ color: agent.color }}>{agent.tasksCompleted}</div>
+                    <div className="text-2xl font-bold" style={{ color: agent.color }}>{metrics.doneTasks}</div>
                     <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">Total Completed</div>
                   </div>
                   <div className="bg-dark-700 rounded-lg p-3 border border-dark-500">
@@ -286,13 +277,13 @@ export default function AgentConfigPanel({ agent, onClose, onAgentUpdate }) {
                     <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">This Week</div>
                   </div>
                   <div className="bg-dark-700 rounded-lg p-3 border border-dark-500">
-                    <div className="text-2xl font-bold text-accent-green">{metrics.qualityScore}%</div>
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">Quality Score</div>
-                    <BarChart value={metrics.qualityScore} color="#22c55e" />
+                    <div className="text-2xl font-bold text-accent-green">{metrics.completionRate}%</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">Completion Rate</div>
+                    <BarChart value={metrics.completionRate} color="#22c55e" />
                   </div>
                   <div className="bg-dark-700 rounded-lg p-3 border border-dark-500">
-                    <div className="text-2xl font-bold text-accent-purple">{metrics.avgCompletionTime}</div>
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">Avg Completion</div>
+                    <div className="text-2xl font-bold text-accent-purple">{metrics.activeTasks}</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">Active Tasks</div>
                   </div>
                 </div>
               </div>
@@ -322,7 +313,11 @@ export default function AgentConfigPanel({ agent, onClose, onAgentUpdate }) {
                   </div>
                   <div className="flex items-center justify-between bg-dark-700 rounded-lg p-3 border border-dark-500">
                     <span className="text-xs text-gray-400">Output Volume</span>
-                    <span className="text-sm font-semibold text-gray-200">{metrics.outputWords.toLocaleString()} words</span>
+                    <span className="text-sm font-semibold text-gray-200">
+                      {metrics.outputWords > 0
+                        ? `${metrics.outputWords.toLocaleString()} words`
+                        : 'No output yet'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -613,22 +608,22 @@ export default function AgentConfigPanel({ agent, onClose, onAgentUpdate }) {
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Agent Health</h3>
                 <div className="bg-dark-700 rounded-lg p-4 border border-dark-500">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-semibold text-gray-200">Overall Score</span>
-                    <span className="text-2xl font-bold text-accent-green">{metrics.qualityScore}%</span>
+                    <span className="text-sm font-semibold text-gray-200">Completion Rate</span>
+                    <span className="text-2xl font-bold text-accent-green">{metrics.completionRate}%</span>
                   </div>
-                  <BarChart value={metrics.qualityScore} color="#22c55e" />
+                  <BarChart value={metrics.completionRate} color="#22c55e" />
                   <div className="grid grid-cols-3 gap-3 mt-4">
                     <div className="text-center">
-                      <div className="text-lg font-bold text-accent-blue">{Math.min(metrics.qualityScore + 5, 100)}%</div>
-                      <div className="text-[9px] text-gray-500 uppercase">Accuracy</div>
+                      <div className="text-lg font-bold text-accent-blue">{metrics.doneTasks}</div>
+                      <div className="text-[9px] text-gray-500 uppercase">Done</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-lg font-bold text-accent-purple">{Math.max(metrics.qualityScore - 8, 60)}%</div>
-                      <div className="text-[9px] text-gray-500 uppercase">Creativity</div>
+                      <div className="text-lg font-bold text-accent-purple">{metrics.tasksByStatus.Review + metrics.tasksByStatus['In Progress']}</div>
+                      <div className="text-[9px] text-gray-500 uppercase">In Pipeline</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-lg font-bold text-accent-orange">{Math.min(metrics.qualityScore + 2, 100)}%</div>
-                      <div className="text-[9px] text-gray-500 uppercase">Efficiency</div>
+                      <div className="text-lg font-bold text-accent-orange">{metrics.avgOutputWords > 0 ? metrics.avgOutputWords.toLocaleString() : '—'}</div>
+                      <div className="text-[9px] text-gray-500 uppercase">Avg Words</div>
                     </div>
                   </div>
                 </div>
