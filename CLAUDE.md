@@ -21,6 +21,9 @@ CMO (strategist), CHIEF (quality reviewer), MUSE (creative), HOOK (headlines/CTA
 - **Airtable lib** (`lib/airtable.js`): Central data layer. All table access goes through exported functions (getTasks, getAgents, getAllActivity, getContent, getGoals, getAgentMemory, etc.)
 - **Goals table may 403**: The Airtable token may lack Goals permissions. Always use `.catch(() => [])` when fetching goals.
 - **maxDuration**: Heavy endpoints use `export const maxDuration = 300` (Vercel Pro limit). Lighter ones use 60.
+- **Rate limiting**: Global middleware (`middleware.js`) enforces per-route limits via `lib/rateLimit.js`. Skips health checks and authenticated cron/webhook requests.
+- **Input validation**: All POST routes use `safeJsonParse()` from `lib/api-utils.js` for safe request body parsing.
+- **Error handling**: Fire-and-forget operations (activity logs, Slack, Drive) use `.catch(err => console.warn('[LABEL]...'))` with prefixed labels — never silent `.catch(() => {})`.
 - **No test suite**: This project has no tests. Don't try to run them.
 
 ## Key Files
@@ -28,8 +31,11 @@ CMO (strategist), CHIEF (quality reviewer), MUSE (creative), HOOK (headlines/CTA
 - `lib/ai.js` — Multi-provider AI with fallback chain
 - `lib/agents.js` — Agent definitions and system prompts
 - `lib/framework.js` — Core pipeline orchestration (task assignment, execution, review)
+- `lib/api-utils.js` — Shared utilities: `safeJsonParse()`, `validateRequired()`, `apiError()`
+- `lib/rateLimit.js` — In-memory sliding window rate limiter with per-route configs
 - `lib/slack.js` — Slack notification helpers
 - `lib/escalation.js` — Error recovery and self-healing
+- `middleware.js` — Global rate limiting middleware for all `/api/*` routes
 - `app/page.js` — Main dashboard (massive file, imports ~50 components)
 - `components/AgentSidebar.jsx` — Agent status panel (large component)
 - `vercel.json` — Cron configuration
@@ -65,6 +71,9 @@ CMO (strategist), CHIEF (quality reviewer), MUSE (creative), HOOK (headlines/CTA
 - `/api/tasks/feedback` — Submit feedback on task output
 - `/api/tasks/comments` — Task comment thread
 
+### Agents
+- `/api/agents/chat` — Agent DM and Council messaging with real AI responses
+
 ### Other
 - `/api/data` — Main data endpoint (tasks, agents, activity)
 - `/api/health` + `/api/health/pipeline` — Health checks
@@ -86,7 +95,7 @@ AIRTABLE_BASE_ID — Airtable base ID
 OPENAI_API_KEY — OpenAI API key (for GPT-4o and DALL-E 3)
 ANTHROPIC_API_KEY — Claude API key
 GOOGLE_AI_KEY — Gemini API key (note: NOT GOOGLE_AI_API_KEY)
-CRON_SECRET — Auth secret for cron/pipeline endpoints (value: council-runner-2026-songfinch)
+CRON_SECRET — Auth secret for cron/pipeline endpoints
 SLACK_WEBHOOK_URL — Slack incoming webhook URL
 GOOGLE_DRIVE_CREDENTIALS — Google Drive service account JSON (for export)
 ```
