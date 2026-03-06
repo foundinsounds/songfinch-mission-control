@@ -80,6 +80,12 @@ function getAgentWorkloads(tasks, agents) {
 
 const MAX_AGENT_QUEUE = 5 // Max queued tasks per agent before redistributing
 
+// GLOBAL WIP LIMIT — Total Assigned + In Progress tasks across ALL agents.
+// User target: 10-20 active tasks at any time. Set to 15 as sweet spot.
+// The cron processes 8-12 tasks/cycle (every 15 min), so 15 WIP means
+// roughly 1 full cycle of work queued — no more, no less.
+const MAX_GLOBAL_WIP = 15
+
 function findBestAgent(task, agents, allTasks, skillData) {
   const workloads = allTasks ? getAgentWorkloads(allTasks, agents) : null
 
@@ -242,7 +248,19 @@ async function autoAssignInboxTasks(tasks, agents, skillData, activity) {
     : tasks.filter(t => t.status === 'Inbox').sort((a, b) => priorityScore(b) - priorityScore(a))
   const assigned = []
 
-  for (const task of inboxTasks) {
+  // GLOBAL WIP CHECK — Stop assigning once we hit the cap.
+  // Count current active tasks (Assigned + In Progress) before assigning more.
+  const currentWIP = tasks.filter(t => t.status === 'Assigned' || t.status === 'In Progress').length
+
+  if (currentWIP >= MAX_GLOBAL_WIP) {
+    console.log(`[RUNNER] Global WIP at ${currentWIP}/${MAX_GLOBAL_WIP} — skipping auto-assign (${inboxTasks.length} inbox tasks waiting)`)
+    return assigned
+  }
+
+  // Only assign enough to reach the WIP cap, not all inbox tasks
+  const slotsAvailable = MAX_GLOBAL_WIP - currentWIP
+
+  for (const task of inboxTasks.slice(0, slotsAvailable)) {
     const agentName = task.agent || findBestAgent(task, agents, tasks, skillData)
     try {
       await updateTask(task.id, { 'Status': 'Assigned', 'Agent': agentName })
@@ -250,7 +268,7 @@ async function autoAssignInboxTasks(tasks, agents, skillData, activity) {
         'Agent': 'Council',
         'Action': 'auto-assigned',
         'Task': task.name,
-        'Details': `Auto-assigned to ${agentName} (load-balanced). Content type: ${task.contentType || 'keyword match'}`,
+        'Details': `Auto-assigned to ${agentName} (WIP ${currentWIP + assigned.length + 1}/${MAX_GLOBAL_WIP}). Content type: ${task.contentType || 'keyword match'}`,
         'Type': 'Task Created',
       })
       assigned.push({ task: task.name, agent: agentName })
@@ -259,6 +277,10 @@ async function autoAssignInboxTasks(tasks, agents, skillData, activity) {
     } catch (err) {
       console.warn(`[RUNNER] Failed to auto-assign "${task.name}":`, err.message)
     }
+  }
+
+  if (inboxTasks.length > slotsAvailable) {
+    console.log(`[RUNNER] WIP cap: assigned ${assigned.length}/${inboxTasks.length} inbox tasks (${inboxTasks.length - slotsAvailable} held back)`)
   }
 
   return assigned
@@ -374,15 +396,20 @@ async function triggerAggressivePlanning(tasks, activity) {
   // Roundtable v4.0: Use orchestration-level intelligence on whether CMO should plan
   const orchestrationSaysPlan = shouldCMOPlan(tasks)
 
-  // AGGRESSIVE: Plan if working pipeline has fewer than 15 tasks or fewer than 8 queued
-  // OR if orchestration detects content gaps (CMO stays 2-3 briefs ahead)
-  if (!orchestrationSaysPlan && workingTasks.length >= 15 && inboxOrAssigned.length >= 8) {
-    console.log(`[RUNNER] Pipeline healthy: ${workingTasks.length} working, ${inboxOrAssigned.length} queued, ${reviewCount} in review. Skipping plan.`)
+  // WIP-AWARE PLANNING: Only create new tasks when the pipeline is running low.
+  // With MAX_GLOBAL_WIP = 15, plan when Inbox is nearly empty so the WIP cap
+  // has room to pull tasks through. Don't flood Inbox with hundreds of briefs.
+  const inboxCount = tasks.filter(t => t.status === 'Inbox').length
+  const activeWIP = tasks.filter(t => t.status === 'Assigned' || t.status === 'In Progress').length
+
+  // Skip planning if we still have a healthy Inbox buffer OR WIP is at capacity
+  if (!orchestrationSaysPlan && (inboxCount >= 10 || activeWIP >= MAX_GLOBAL_WIP)) {
+    console.log(`[RUNNER] Pipeline stocked: ${inboxCount} inbox, ${activeWIP} active WIP (cap ${MAX_GLOBAL_WIP}), ${reviewCount} review. Skipping plan.`)
     return null
   }
 
   try {
-    console.log(`[RUNNER] Pipeline needs fuel: ${workingTasks.length} working, ${inboxOrAssigned.length} queued, ${reviewCount} in review, orchestration=${orchestrationSaysPlan}. Triggering CMO planner...`)
+    console.log(`[RUNNER] Pipeline needs fuel: ${inboxCount} inbox, ${activeWIP} active WIP, ${reviewCount} review, orchestration=${orchestrationSaysPlan}. Triggering CMO planner...`)
 
     // Roundtable v4.0: Inject content gap analysis into planning context
     let gapContext = ''
@@ -535,7 +562,49 @@ export async function GET(request) {
       skillData = buildSkillLookup(tasks, activity)
     } catch { /* Non-critical: routing falls back to load-only balancing */ }
 
-    // 5. AUTO-ASSIGN: Move Inbox tasks to Assigned (skill-aware, priority-tiered)
+    // 4b. WIP DRAIN: Move excess Assigned tasks back to Inbox to enforce global WIP limit.
+    // This is the one-time cleanup for the 700+ task backlog. On subsequent runs it's a no-op
+    // because auto-assign respects the cap.
+    const assignedTasks_preDrain = tasks.filter(t => t.status === 'Assigned')
+    if (assignedTasks_preDrain.length > MAX_GLOBAL_WIP) {
+      // Keep the highest-priority tasks assigned, drain the rest back to Inbox
+      const sortedAssigned = activity
+        ? sortByPriorityTier(assignedTasks_preDrain, activity)
+        : assignedTasks_preDrain.sort((a, b) => priorityScore(b) - priorityScore(a))
+
+      const toKeep = sortedAssigned.slice(0, MAX_GLOBAL_WIP)
+      const toDrain = sortedAssigned.slice(MAX_GLOBAL_WIP)
+
+      // Batch drain — cap at 50 per cycle to avoid Airtable rate limits
+      const drainBatch = toDrain.slice(0, 50)
+      let drained = 0
+
+      for (const task of drainBatch) {
+        try {
+          await updateTask(task.id, { 'Status': 'Inbox' })
+          task.status = 'Inbox'
+          drained++
+        } catch (err) {
+          console.warn(`[RUNNER] Failed to drain "${task.name}":`, err.message)
+        }
+      }
+
+      if (drained > 0) {
+        console.log(`[RUNNER] 🔽 WIP drain: moved ${drained}/${toDrain.length} excess Assigned tasks back to Inbox (keeping top ${toKeep.length})`)
+        results.wipDrained = drained
+        results.wipRemaining = toDrain.length - drained
+
+        await addActivity({
+          'Agent': 'Council',
+          'Action': 'wip-drain',
+          'Task': 'Pipeline',
+          'Details': `WIP limit enforced: drained ${drained} excess Assigned tasks back to Inbox. Target: ${MAX_GLOBAL_WIP} max active tasks. ${toDrain.length - drained} more to drain in subsequent cycles.`,
+          'Type': 'Comment',
+        }).catch(() => {})
+      }
+    }
+
+    // 5. AUTO-ASSIGN: Move Inbox tasks to Assigned (skill-aware, priority-tiered, WIP-capped)
     const autoAssigned = await autoAssignInboxTasks(tasks, agents, skillData, activity)
     results.autoAssigned = autoAssigned
     if (autoAssigned.length > 0) {
