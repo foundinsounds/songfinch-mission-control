@@ -94,7 +94,9 @@ function computeDiff(oldText, newText) {
   const n = newLines.length
 
   // For performance, use a simpler approach for very long texts
-  if (m + n > 2000) {
+  // LCS builds an (m+1)*(n+1) DP table — at 500 lines that's 250K cells, still fast.
+  // Above that, browser can freeze (especially mobile). Fall back to simple diff.
+  if (m + n > 500) {
     // Fallback: show first 50 lines of each with markers
     const maxLines = 50
     for (let i = 0; i < Math.min(m, maxLines); i++) {

@@ -63,11 +63,26 @@ export async function GET(request) {
     }
 
     // ---- AGENT PRODUCTIVITY ----
+    // Pre-compute maps for O(1) lookup per agent (avoids N*M filtering)
+    const tasksByAgent = {}
+    tasks.forEach(t => {
+      if (!t.agent) return
+      if (!tasksByAgent[t.agent]) tasksByAgent[t.agent] = []
+      tasksByAgent[t.agent].push(t)
+    })
+
+    const activityByAgent = {}
+    activity.forEach(a => {
+      if (!a.agent) return
+      if (!activityByAgent[a.agent]) activityByAgent[a.agent] = []
+      activityByAgent[a.agent].push(a)
+    })
+
     const agentStats = agents.map(agent => {
-      const agentTasks = tasks.filter(t => t.agent === agent.name)
+      const agentTasks = tasksByAgent[agent.name] || []
       const doneTasks = agentTasks.filter(t => t.status === 'Done')
       const activeTasks = agentTasks.filter(t => t.status !== 'Done')
-      const agentActivity = activity.filter(a => a.agent === agent.name)
+      const agentActivity = activityByAgent[agent.name] || []
 
       // Recent activity count
       const recentActivity = agentActivity.filter(a =>

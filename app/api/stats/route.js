@@ -134,8 +134,16 @@ export async function GET() {
     }))
 
     // ── AGENT PERFORMANCE ─────────────────────────────
+    // Pre-compute task map for O(1) lookup per agent
+    const tasksByAgent = {}
+    tasks.forEach(t => {
+      if (!t.agent) return
+      if (!tasksByAgent[t.agent]) tasksByAgent[t.agent] = []
+      tasksByAgent[t.agent].push(t)
+    })
+
     const agentPerformance = agents.map(agent => {
-      const agentTasks = tasks.filter(t => t.agent === agent.name)
+      const agentTasks = tasksByAgent[agent.name] || []
       const agentDone = agentTasks.filter(t => t.status === 'Done')
       const agentReview = agentTasks.filter(t => t.status === 'Review')
       const agentActive = agentTasks.filter(t => t.status === 'In Progress' || t.status === 'Assigned')
