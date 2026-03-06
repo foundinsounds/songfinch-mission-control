@@ -11,7 +11,13 @@ export async function GET() {
     const [tasks, agents, activity] = await Promise.all([
       getTasks({ noCache: true }),
       getAgents({ noCache: true }),
-      getActivityFeed(),
+      // Fetch CHIEF reviews + image generation activities (up to 100 records)
+      // Previous default of 20 records with Agent-sort caused CHIEF data to be invisible
+      getActivityFeed({
+        maxRecords: 100,
+        noCache: true,
+        filterByFormula: "OR({Agent}='CHIEF',{Agent}='PIXEL',{Agent}='MUSE',{Action}='auto-generated image')",
+      }),
     ])
 
     const now = new Date()
