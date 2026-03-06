@@ -577,8 +577,10 @@ export async function GET(request) {
       }).catch(() => {})
     }
 
-    // 5. STALE TASK RECYCLER: Tasks assigned for 48h+ without progress get reassigned
-    const STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000 // 48 hours
+    // 5. STALE TASK RECYCLER: Tasks assigned for 24h+ without progress get reassigned
+    // Reduced from 48h — with 15-min CRON cycles, tasks should show progress within hours.
+    // 24h gives agents plenty of time while preventing multi-day stalls (e.g., PIXEL stuck 17h).
+    const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000 // 24 hours
     const staleCandidates = tasks.filter(t => {
       if (t.status !== 'Assigned') return false
       if (!t.createdAt) return false

@@ -165,7 +165,25 @@ export async function POST(request) {
     }
 
     // DEDUPLICATION: Filter out tasks too similar to existing ones
-    const existingNames = tasks.map(t => t.name?.toLowerCase().trim()).filter(Boolean)
+    // IMPORTANT: Only dedup against ACTIVE tasks + recent Done (last 7 days).
+    // Old Done tasks should NOT block new content with similar themes —
+    // otherwise the pipeline starves after completing a batch (dedup death spiral).
+    const DEDUP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+    const now = Date.now()
+    const dedupPool = tasks.filter(t => {
+      if (t.status !== 'Done') return true // Always dedup against active tasks
+      // For Done tasks, only include recent ones (last 7 days)
+      if (t.completedAt) {
+        return (now - new Date(t.completedAt).getTime()) < DEDUP_WINDOW_MS
+      }
+      if (t.createdAt) {
+        return (now - new Date(t.createdAt).getTime()) < DEDUP_WINDOW_MS
+      }
+      return false // No date info = old task, skip from dedup
+    })
+    const existingNames = dedupPool.map(t => t.name?.toLowerCase().trim()).filter(Boolean)
+    console.log(`[PLANNER] Dedup pool: ${existingNames.length} tasks (${dedupPool.filter(t => t.status !== 'Done').length} active + ${dedupPool.filter(t => t.status === 'Done').length} recent Done) out of ${tasks.length} total`)
+
     const deduped = plannedTasks.filter(task => {
       const newName = task.name?.toLowerCase().trim()
       if (!newName) return false
@@ -183,7 +201,7 @@ export async function POST(request) {
         }
         // Same content type + platform + scheduled date = likely duplicate concept
         if (task.contentType && task.platform && task.scheduledDate) {
-          const existingTask = tasks.find(t => t.name?.toLowerCase().trim() === existing)
+          const existingTask = dedupPool.find(t => t.name?.toLowerCase().trim() === existing)
           if (existingTask &&
               existingTask.contentType === task.contentType &&
               existingTask.platform === task.platform &&
@@ -199,7 +217,7 @@ export async function POST(request) {
 
     const dupCount = plannedTasks.length - deduped.length
     if (dupCount > 0) {
-      console.log(`[PLANNER] Deduplication removed ${dupCount} duplicate tasks`)
+      console.log(`[PLANNER] Deduplication removed ${dupCount} of ${plannedTasks.length} planned tasks (${deduped.length} survived)`)
     }
 
     // Create tasks in Airtable
