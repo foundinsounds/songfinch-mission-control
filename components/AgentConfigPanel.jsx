@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { MODEL_OPTIONS, AGENT_STATUSES, MODEL_LEGACY_MAP } from '../lib/constants'
 
 // Improvement suggestions based on agent type
@@ -81,6 +81,15 @@ export default function AgentConfigPanel({ agent, onClose, onAgentUpdate }) {
 
   const metrics = useMemo(() => getAgentMetrics(agent), [agent.id])
   const improvements = IMPROVEMENT_SUGGESTIONS[agent.type] || IMPROVEMENT_SUGGESTIONS['SPC']
+
+  // Close panel on Escape key press (WCAG dialog pattern)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
 
   const handleSave = useCallback(async () => {
     setSaving(true)
@@ -185,10 +194,11 @@ export default function AgentConfigPanel({ agent, onClose, onAgentUpdate }) {
   ]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-end">
+    <div className="fixed inset-0 z-50 flex items-center justify-end" role="dialog" aria-modal="true" aria-label={`${agent.name} agent configuration`}>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        role="presentation"
         onClick={onClose}
       />
 
@@ -221,18 +231,23 @@ export default function AgentConfigPanel({ agent, onClose, onAgentUpdate }) {
             <button
               onClick={onClose}
               className="text-gray-500 hover:text-white transition-colors p-1 mt-1"
+              aria-label="Close agent configuration panel"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex gap-1">
+          <div className="flex gap-1" role="tablist" aria-label="Agent configuration tabs">
             {tabs.map((tab) => (
               <button
                 key={tab.key}
+                role="tab"
+                aria-selected={activeTab === tab.key}
+                aria-controls={`tabpanel-${tab.key}`}
+                id={`tab-${tab.key}`}
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex-1 text-center py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
                   activeTab === tab.key
@@ -240,7 +255,7 @@ export default function AgentConfigPanel({ agent, onClose, onAgentUpdate }) {
                     : 'bg-dark-700 text-gray-500 border border-transparent hover:text-gray-300 hover:bg-dark-600'
                 }`}
               >
-                <span className="mr-1">{tab.icon}</span> {tab.label}
+                <span className="mr-1" aria-hidden="true">{tab.icon}</span> {tab.label}
               </button>
             ))}
           </div>
@@ -251,7 +266,7 @@ export default function AgentConfigPanel({ agent, onClose, onAgentUpdate }) {
 
           {/* ===== OVERVIEW TAB ===== */}
           {activeTab === 'overview' && (
-            <>
+            <div role="tabpanel" id="tabpanel-overview" aria-labelledby="tab-overview">
               {/* Description */}
               <div>
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">About</h3>
@@ -329,12 +344,12 @@ export default function AgentConfigPanel({ agent, onClose, onAgentUpdate }) {
                   </div>
                 )}
               </div>
-            </>
+            </div>
           )}
 
           {/* ===== CONFIGURE TAB ===== */}
           {activeTab === 'config' && (
-            <>
+            <div role="tabpanel" id="tabpanel-config" aria-labelledby="tab-config">
               {/* Status Toggle */}
               <div>
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Status</h3>
@@ -478,12 +493,12 @@ export default function AgentConfigPanel({ agent, onClose, onAgentUpdate }) {
                   </p>
                 )}
               </div>
-            </>
+            </div>
           )}
 
           {/* ===== IMPROVE TAB ===== */}
           {activeTab === 'improve' && (
-            <>
+            <div role="tabpanel" id="tabpanel-improve" aria-labelledby="tab-improve">
               {/* AI Action Buttons */}
               <div className="flex gap-3">
                 <button
@@ -641,7 +656,7 @@ export default function AgentConfigPanel({ agent, onClose, onAgentUpdate }) {
                   )}
                 </div>
               </div>
-            </>
+            </div>
           )}
         </div>
 

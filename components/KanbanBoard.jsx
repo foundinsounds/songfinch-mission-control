@@ -16,7 +16,10 @@ function WipToast({ toast, onDismiss }) {
   }, [toast.id, onDismiss])
 
   return (
-    <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg border shadow-xl animate-slide-in-right backdrop-blur-md"
+    <div
+      role="alert"
+      aria-live="assertive"
+      className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg border shadow-xl animate-slide-in-right backdrop-blur-md"
       style={{
         background: toast.level === 'over' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(234, 179, 8, 0.12)',
         borderColor: toast.level === 'over' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(234, 179, 8, 0.3)',
@@ -41,8 +44,9 @@ function WipToast({ toast, onDismiss }) {
       <button
         onClick={() => onDismiss(toast.id)}
         className="text-gray-600 hover:text-gray-400 transition-colors mt-0.5 shrink-0"
+        aria-label="Dismiss WIP warning"
       >
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+        <svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
       </button>
@@ -333,14 +337,16 @@ function InlineQuickAdd({ columnStatus, onCreateTask }) {
           onKeyDown={handleKeyDown}
           onBlur={() => { if (!value.trim()) setIsOpen(false) }}
           placeholder="Task name..."
+          aria-label={`New task name for ${columnStatus} column`}
           className="flex-1 bg-transparent text-[11px] text-gray-200 placeholder-gray-600 outline-none py-0.5"
         />
         {value.trim() && (
           <button
             onClick={handleSubmit}
             className="text-accent-orange hover:text-accent-orange/80 transition-colors"
+            aria-label="Add task"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
           </button>

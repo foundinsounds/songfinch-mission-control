@@ -828,6 +828,13 @@ export default function Roundtable() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
+      {/* Skip navigation link for keyboard users */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:bg-dark-800 focus:text-white focus:px-4 focus:py-2 focus:rounded focus:ring-2 focus:ring-accent-orange"
+      >
+        Skip to main content
+      </a>
       <FaviconBadge tasks={tasks} />
       {/* Top Header Bar */}
       <StatsHeader
@@ -859,10 +866,16 @@ export default function Roundtable() {
       />
 
       {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
+      <main id="main-content" className="flex flex-1 overflow-hidden">
         {/* Mobile Sidebar Overlay */}
         {mobileSidebar && (
-          <div className="md:hidden mobile-sidebar-overlay" onClick={() => setMobileSidebar(false)} />
+          <div
+            className="md:hidden mobile-sidebar-overlay"
+            role="presentation"
+            aria-label="Close sidebar"
+            onClick={() => setMobileSidebar(false)}
+            onKeyDown={(e) => { if (e.key === 'Escape') setMobileSidebar(false) }}
+          />
         )}
 
         {/* Agent Sidebar — hidden on mobile unless toggled */}
@@ -1064,7 +1077,13 @@ export default function Roundtable() {
 
         {/* Mobile Feed Overlay */}
         {mobileFeed && (
-          <div className="md:hidden mobile-sidebar-overlay" onClick={() => setMobileFeed(false)} />
+          <div
+            className="md:hidden mobile-sidebar-overlay"
+            role="presentation"
+            aria-label="Close feed"
+            onClick={() => setMobileFeed(false)}
+            onKeyDown={(e) => { if (e.key === 'Escape') setMobileFeed(false) }}
+          />
         )}
 
         {/* Live Feed — hidden on mobile unless toggled */}
@@ -1077,7 +1096,7 @@ export default function Roundtable() {
             onToggleCollapse={() => setFeedCollapsed(c => !c)}
           />
         </div>
-      </div>
+      </main>
 
       {/* Footer */}
       <footer className="footer-bar border-t border-dark-500 px-3 sm:px-6 py-2 pb-14 flex items-center justify-between shrink-0">
@@ -1110,6 +1129,7 @@ export default function Roundtable() {
               disabled={isSyncing}
               className="ml-0.5 p-0.5 rounded hover:bg-dark-600 transition-colors disabled:opacity-30"
               title="Refresh now (⌘R)"
+              aria-label="Refresh data"
             >
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isSyncing ? 'animate-spin' : ''}>
                 <polyline points="23 4 23 10 17 10" />
@@ -1148,8 +1168,10 @@ export default function Roundtable() {
           <ExportButton tasks={tasks} activity={activity} />
           <span className="opacity-40">|</span>
           <button onClick={() => setShowChat(!showChat)}
-            className="hover:text-accent-orange transition-colors flex items-center gap-1">
-            💬 <span className="hidden sm:inline">Chat</span>
+            className="hover:text-accent-orange transition-colors flex items-center gap-1"
+            aria-label={showChat ? 'Close chat' : 'Open chat'}
+          >
+            <span aria-hidden="true">💬</span> <span className="hidden sm:inline">Chat</span>
           </button>
         </div>
       </footer>
