@@ -29,7 +29,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json().catch(() => ({}))
-    const limit = body.limit || 15 // Aggressive: clear Review queue fast so agents keep creating
+    const limit = body.limit || 25 // Aggressive: clear Review queue fast so agents keep creating
 
     // Fetch tasks in Review status
     const [tasks, agents, activity] = await Promise.all([
@@ -58,8 +58,8 @@ export async function POST(request) {
 
     // Process reviews in batches of 5 with delays between batches
     // This prevents hitting the 30K input tokens/min rate limit
-    const BATCH_SIZE = 5
-    const BATCH_DELAY_MS = 12000 // 12s between batches — lets rate limit window slide
+    const BATCH_SIZE = 8
+    const BATCH_DELAY_MS = 8000 // 8s between batches — lets rate limit window slide
     const reviewResults = []
 
     for (let i = 0; i < toReview.length; i += BATCH_SIZE) {

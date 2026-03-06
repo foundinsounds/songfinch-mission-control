@@ -59,20 +59,22 @@ export async function GET() {
       new Date(t.scheduledDate).getTime() < now
     ).length
 
-    // Bottleneck detection
+    // Bottleneck detection — thresholds tuned for a 10-agent pipeline
+    // With multiple content agents producing simultaneously, Review naturally accumulates.
+    // CHIEF processes ~15 per cycle (every 15 min) = ~60/hour clearance rate.
     const inbox = byStatus['Inbox'] || 0
     const review = byStatus['Review'] || 0
     const inProgress = byStatus['In Progress'] || 0
     let bottleneck = null
-    if (review > 10) bottleneck = { stage: 'Review', count: review, severity: 'high' }
-    else if (inbox > 15) bottleneck = { stage: 'Inbox', count: inbox, severity: 'high' }
-    else if (review > 5) bottleneck = { stage: 'Review', count: review, severity: 'medium' }
-    else if (inbox > 8) bottleneck = { stage: 'Inbox', count: inbox, severity: 'medium' }
+    if (review > 40) bottleneck = { stage: 'Review', count: review, severity: 'high' }
+    else if (inbox > 20) bottleneck = { stage: 'Inbox', count: inbox, severity: 'high' }
+    else if (review > 20) bottleneck = { stage: 'Review', count: review, severity: 'medium' }
+    else if (inbox > 10) bottleneck = { stage: 'Inbox', count: inbox, severity: 'medium' }
 
     // Pipeline health score (0-100)
     let healthScore = 100
-    if (bottleneck?.severity === 'high') healthScore -= 30
-    else if (bottleneck?.severity === 'medium') healthScore -= 15
+    if (bottleneck?.severity === 'high') healthScore -= 25
+    else if (bottleneck?.severity === 'medium') healthScore -= 10
     if (overdue > 5) healthScore -= 20
     else if (overdue > 0) healthScore -= overdue * 3
     if (doneLast24h === 0 && (inbox + inProgress) > 0) healthScore -= 20
@@ -96,7 +98,7 @@ export async function GET() {
         dailyAvg: Math.round((doneLast7d / 7) * 10) / 10,
       },
       agents: agentLoad,
-      activeAgents: agents.filter(a => a.status === 'Active').length,
+      activeAgents: agents.filter(a => a.status === 'Active' || a.status === 'Working').length,
       totalAgents: agents.length,
     })
   } catch (err) {

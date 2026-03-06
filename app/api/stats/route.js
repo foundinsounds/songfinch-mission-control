@@ -56,16 +56,29 @@ export async function GET() {
 
     // ── QUALITY METRICS ──────────────────────────────
     // Parse quality scores from activity feed (CHIEF reviews include scores)
+    // Auto-review logs: action='approved' with "Auto-approved (3.8/5)..."
+    //                   action='revision requested' with "Sent back for revision (2.5/5)..."
+    //                   action='review cycle' for batch summaries
     const reviewActivities = activity.filter(a =>
-      a.agent === 'CHIEF' && (a.action === 'reviewed' || a.action === 'auto-reviewed' || a.details?.includes('Score:'))
+      a.agent === 'CHIEF' && (
+        a.action === 'approved' ||
+        a.action === 'revision requested' ||
+        a.action === 'reviewed' ||
+        a.action === 'auto-reviewed' ||
+        a.details?.includes('Score:') ||
+        a.details?.match(/\(\d+\.?\d*\/5\)/)
+      )
     )
 
     const qualityScores = []
     const revisionTasks = []
 
     reviewActivities.forEach(a => {
-      // Extract score from details like "Score: 3.8/5" or "scored 4.2"
+      // Extract score from multiple formats:
+      //   "Score: 3.8/5" or "scored 4.2"
+      //   "Auto-approved (3.8/5)." or "Sent back for revision (2.5/5)."
       const scoreMatch = a.details?.match(/(?:Score|scored)[:\s]*(\d+\.?\d*)/i)
+        || a.details?.match(/\((\d+\.?\d*)\/5\)/)
       if (scoreMatch) {
         qualityScores.push({
           score: parseFloat(scoreMatch[1]),
@@ -73,8 +86,8 @@ export async function GET() {
           agent: a.agent,
         })
       }
-      // Check for revisions
-      if (a.details?.includes('revision') || a.details?.includes('Sent back') || a.action === 'requested revision') {
+      // Check for revisions — match both action names and detail text
+      if (a.action === 'revision requested' || a.details?.includes('revision') || a.details?.includes('Sent back')) {
         revisionTasks.push(a.task)
       }
     })

@@ -347,7 +347,7 @@ async function triggerAutoReview() {
     const res = await internalFetch(`/api/review/auto`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ limit: 15 }),
+      body: JSON.stringify({ limit: 25 }),
       timeout: 180000, // 3 min — reviews can be slow with MUSE QA gate
     })
     const data = await res.json()
