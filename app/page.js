@@ -42,7 +42,6 @@ import BulkActions, { useTaskSelection } from '../components/BulkActions'
 import AgentWorkloadBalancer from '../components/AgentWorkloadBalancer'
 import AgentWorkflowLive from '../components/AgentWorkflowLive'
 import ViewTransition from '../components/ViewTransition'
-import SearchBar from '../components/SearchBar'
 import QuickFiltersBar from '../components/QuickFiltersBar'
 import FooterSparkline from '../components/FooterSparkline'
 import ScrollToTop from '../components/ScrollToTop'
@@ -360,17 +359,19 @@ export default function Roundtable() {
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Breadcrumb Navigation Trail */}
-          <Breadcrumb
-            currentView={currentView}
-            selectedAgent={selectedAgent}
-            selectedTask={selectedTask}
-            onNavigate={({ view, agent, task }) => {
-              if (view) setCurrentView(view)
-              setSelectedAgent(agent || null)
-              if (task === null) setSelectedTask(null)
-            }}
-          />
+          {/* Breadcrumb — only show when there's deeper navigation context */}
+          {(selectedAgent || selectedTask) && (
+            <Breadcrumb
+              currentView={currentView}
+              selectedAgent={selectedAgent}
+              selectedTask={selectedTask}
+              onNavigate={({ view, agent, task }) => {
+                if (view) setCurrentView(view)
+                setSelectedAgent(agent || null)
+                if (task === null) setSelectedTask(null)
+              }}
+            />
+          )}
 
           {/* View Switcher — Primary tabs + More dropdown */}
           <ViewSwitcher currentView={currentView} onViewChange={setCurrentView} inReview={stats.inReview} inboxCount={tasks.filter(t => t.status !== 'Done' && t.status !== 'Archived').length} />
@@ -384,23 +385,17 @@ export default function Roundtable() {
             existingTasks={tasks}
           />
 
-          {/* Global Search Bar */}
-          {(currentView === 'kanban' || currentView === 'list') && (
-            <SearchBar
-              value={searchQuery}
-              onChange={setSearchQuery}
-              resultCount={filteredTasks.length}
-              totalCount={tasks.length}
-            />
-          )}
-
-          {/* Quick Filters Bar */}
+          {/* Unified Search + Filters Toolbar */}
           {(currentView === 'kanban' || currentView === 'list') && (
             <QuickFiltersBar
               tasks={tasks}
               agents={agents}
               filters={quickFilters}
               onFiltersChange={setQuickFilters}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              resultCount={filteredTasks.length}
+              totalCount={tasks.length}
             />
           )}
 

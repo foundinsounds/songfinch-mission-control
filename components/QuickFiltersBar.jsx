@@ -1,12 +1,12 @@
 'use client'
 
-import { useMemo, useState, useRef, useEffect } from 'react'
+import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
 
 /**
- * QuickFiltersBar — Horizontal filter chip bar below the search bar.
- * Provides instant filtering by agent, priority, and content type.
- * Active filters reduce the task set shown on the board.
- * Chips animate in/out with subtle transitions.
+ * QuickFiltersBar — Unified search + filter toolbar.
+ * Combines the search input and filter dropdowns into a single row,
+ * reducing chrome overhead. Search on the left, filters on the right.
+ * Active filter chips display inline for quick removal.
  */
 
 const PRIORITY_OPTIONS = [
@@ -116,7 +116,24 @@ function FilterDropdown({ label, icon, options, selectedValues, onChange, align 
   )
 }
 
-export default function QuickFiltersBar({ tasks, agents, filters, onFiltersChange }) {
+export default function QuickFiltersBar({ tasks, agents, filters, onFiltersChange, searchQuery = '', onSearchChange, resultCount, totalCount }) {
+  const searchRef = useRef(null)
+
+  // Cmd/Ctrl+F focuses the inline search
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+        e.preventDefault()
+        searchRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  const hasSearch = searchQuery && searchQuery.length > 0
+
   // Derive unique content types from current tasks
   const contentTypes = useMemo(() => {
     const types = new Set()
@@ -152,12 +169,40 @@ export default function QuickFiltersBar({ tasks, agents, filters, onFiltersChang
 
   return (
     <div className="px-3 sm:px-6 py-1.5 border-b border-dark-500/50 flex items-center gap-2 overflow-x-auto scrollbar-hide bg-dark-800/30">
-      {/* Filter icon */}
-      <div className="flex items-center gap-1 text-[10px] text-gray-600 shrink-0">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+      {/* Inline search input */}
+      <div className="flex items-center gap-1.5 min-w-0 shrink-0" style={{ width: hasSearch ? '180px' : '120px', transition: 'width 200ms' }}>
+        <svg
+          width="12" height="12" viewBox="0 0 24 24" fill="none"
+          stroke={hasSearch ? '#f97316' : '#6b7280'} strokeWidth="2"
+          strokeLinecap="round" strokeLinejoin="round"
+          className="shrink-0 transition-colors"
+        >
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
-        <span className="hidden sm:inline">Filters</span>
+        <input
+          ref={searchRef}
+          type="text"
+          value={searchQuery}
+          onChange={(e) => onSearchChange?.(e.target.value)}
+          placeholder="Search… ⌘F"
+          className="w-full bg-transparent text-[11px] text-gray-200 placeholder-gray-600 outline-none border-none"
+        />
+        {hasSearch && (
+          <span className="text-[9px] font-mono text-accent-orange shrink-0">
+            {resultCount}/{totalCount}
+          </span>
+        )}
+        {hasSearch && (
+          <button
+            onClick={() => onSearchChange?.('')}
+            className="text-gray-500 hover:text-gray-300 shrink-0 transition-colors"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
       </div>
 
       <div className="h-3 w-px bg-dark-500 shrink-0" />
