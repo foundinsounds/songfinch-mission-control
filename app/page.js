@@ -294,31 +294,30 @@ export default function Roundtable() {
       <FaviconBadge tasks={tasks} />
       {/* Top Header Bar */}
       <StatsHeader
-        stats={stats}
-        sparklines={sparklines}
-        currentTime={currentTime}
-        dataSource={dataSource}
-        lastSync={lastSync}
-        isSyncing={isSyncing}
-        onRefresh={fetchData}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        onRunAgents={handleRunAgents}
-        runningAgents={runningAgents}
-        onPlanCampaign={handlePlanCampaign}
-        planningCampaign={planningCampaign}
-        onOpenSettings={() => setShowSettings(true)}
-        onOpenMetrics={() => setShowMetrics(true)}
-        onOpenComparison={() => setShowComparison(true)}
-        onOpenCalendarHeatmap={() => setShowCalendarHeatmap(true)}
-        onOpenTimeline={() => setShowTimeline(true)}
-        onToggleFocusMode={() => setFocusModeActive(s => !s)}
-        focusModeActive={focusModeActive}
-        onToggleSidebar={() => setMobileSidebar(s => !s)}
-        onToggleFeed={() => setMobileFeed(f => !f)}
-        notificationSlot={<NotificationCenter tasks={tasks} activity={activity} />}
-        pipelineSlot={<PipelineStatusBadge />}
-        productivitySlot={<ProductivityScore tasks={tasks} activity={activity} />}
+        data={{ stats, sparklines, currentTime, dataSource, lastSync }}
+        sync={{ isSyncing, onRefresh: fetchData }}
+        actions={{
+          onRunAgents: handleRunAgents, runningAgents,
+          onPlanCampaign: handlePlanCampaign, planningCampaign,
+        }}
+        panels={{
+          onOpenSettings: () => setShowSettings(true),
+          onOpenMetrics: () => setShowMetrics(true),
+          onOpenComparison: () => setShowComparison(true),
+          onOpenCalendarHeatmap: () => setShowCalendarHeatmap(true),
+          onOpenTimeline: () => setShowTimeline(true),
+        }}
+        ui={{
+          theme, onToggleTheme: toggleTheme,
+          focusModeActive, onToggleFocusMode: () => setFocusModeActive(s => !s),
+          onToggleSidebar: () => setMobileSidebar(s => !s),
+          onToggleFeed: () => setMobileFeed(f => !f),
+        }}
+        slots={{
+          notification: <NotificationCenter tasks={tasks} activity={activity} />,
+          pipeline: <PipelineStatusBadge />,
+          productivity: <ProductivityScore tasks={tasks} activity={activity} />,
+        }}
       />
 
       {/* Main Content */}

@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { GOOGLE_DRIVE_FOLDER, AIRTABLE_BASE_URL, APP_NAME, COUNCIL_NAME, COUNCIL_ORG, CRON_INTERVAL_MINUTES } from '../lib/constants'
+import { useVisibilityPolling } from '../lib/useVisibilityPolling'
 import MiniSparkline from './MiniSparkline'
 
 function RoundtableLogo({ size = 22 }) {
@@ -29,21 +30,17 @@ function RoundtableLogo({ size = 22 }) {
 function CronCountdown() {
   const [remaining, setRemaining] = useState('')
 
-  useEffect(() => {
-    function calc() {
-      const now = new Date()
-      const next = new Date(now)
-      next.setMinutes(CRON_INTERVAL_MINUTES, 0, 0)
-      if (next <= now) next.setHours(next.getHours() + 1)
-      const diff = Math.max(0, Math.floor((next - now) / 1000))
-      const m = Math.floor(diff / 60)
-      const s = diff % 60
-      setRemaining(`${m}:${s.toString().padStart(2, '0')}`)
-    }
-    calc()
-    const id = setInterval(calc, 1000)
-    return () => clearInterval(id)
-  }, [])
+  // Visibility-aware: pauses the 1 s tick when tab is hidden
+  useVisibilityPolling(useCallback(() => {
+    const now = new Date()
+    const next = new Date(now)
+    next.setMinutes(CRON_INTERVAL_MINUTES, 0, 0)
+    if (next <= now) next.setHours(next.getHours() + 1)
+    const diff = Math.max(0, Math.floor((next - now) / 1000))
+    const m = Math.floor(diff / 60)
+    const s = diff % 60
+    setRemaining(`${m}:${s.toString().padStart(2, '0')}`)
+  }, []), 1_000)
 
   return (
     <span className="text-[9px] font-mono text-gray-600 tabular-nums">{remaining}</span>
@@ -53,26 +50,23 @@ function CronCountdown() {
 function LastRunIndicator({ lastRunTime }) {
   const [display, setDisplay] = useState('')
 
-  useEffect(() => {
-    function update() {
-      if (!lastRunTime) {
-        setDisplay('never')
-        return
-      }
-      const diff = Date.now() - new Date(lastRunTime).getTime()
-      const secs = Math.floor(diff / 1000)
-      const mins = Math.floor(secs / 60)
-      const hrs = Math.floor(mins / 60)
+  const update = useCallback(() => {
+    if (!lastRunTime) { setDisplay('never'); return }
+    const diff = Date.now() - new Date(lastRunTime).getTime()
+    const secs = Math.floor(diff / 1000)
+    const mins = Math.floor(secs / 60)
+    const hrs = Math.floor(mins / 60)
 
-      if (secs < 60) setDisplay('just now')
-      else if (mins < 60) setDisplay(`${mins}m ago`)
-      else if (hrs < 24) setDisplay(`${hrs}h ago`)
-      else setDisplay(`${Math.floor(hrs / 24)}d ago`)
-    }
-    update()
-    const id = setInterval(update, 10000) // update every 10s
-    return () => clearInterval(id)
+    if (secs < 60) setDisplay('just now')
+    else if (mins < 60) setDisplay(`${mins}m ago`)
+    else if (hrs < 24) setDisplay(`${hrs}h ago`)
+    else setDisplay(`${Math.floor(hrs / 24)}d ago`)
   }, [lastRunTime])
+
+  // Immediate update when lastRunTime changes
+  useEffect(() => { update() }, [update])
+  // Visibility-aware periodic refresh (skip initial — useEffect above handles it)
+  useVisibilityPolling(update, 10_000, { immediate: false })
 
   const isRecent = lastRunTime && (Date.now() - new Date(lastRunTime).getTime()) < 120000 // < 2min
 
@@ -95,27 +89,24 @@ function LastRunIndicator({ lastRunTime }) {
 function LastSyncBadge({ lastSync, isSyncing, onRefresh }) {
   const [display, setDisplay] = useState('')
 
-  useEffect(() => {
-    function update() {
-      if (!lastSync) {
-        setDisplay('--')
-        return
-      }
-      const diff = Date.now() - new Date(lastSync).getTime()
-      const secs = Math.floor(diff / 1000)
-      const mins = Math.floor(secs / 60)
-      const hrs = Math.floor(mins / 60)
+  const update = useCallback(() => {
+    if (!lastSync) { setDisplay('--'); return }
+    const diff = Date.now() - new Date(lastSync).getTime()
+    const secs = Math.floor(diff / 1000)
+    const mins = Math.floor(secs / 60)
+    const hrs = Math.floor(mins / 60)
 
-      if (secs < 10) setDisplay('just now')
-      else if (secs < 60) setDisplay(`${secs}s ago`)
-      else if (mins < 60) setDisplay(`${mins}m ago`)
-      else if (hrs < 24) setDisplay(`${hrs}h ago`)
-      else setDisplay(`${Math.floor(hrs / 24)}d ago`)
-    }
-    update()
-    const id = setInterval(update, 5000)
-    return () => clearInterval(id)
+    if (secs < 10) setDisplay('just now')
+    else if (secs < 60) setDisplay(`${secs}s ago`)
+    else if (mins < 60) setDisplay(`${mins}m ago`)
+    else if (hrs < 24) setDisplay(`${hrs}h ago`)
+    else setDisplay(`${Math.floor(hrs / 24)}d ago`)
   }, [lastSync])
+
+  // Immediate update when lastSync changes
+  useEffect(() => { update() }, [update])
+  // Visibility-aware periodic refresh
+  useVisibilityPolling(update, 5_000, { immediate: false })
 
   const isFresh = lastSync && (Date.now() - new Date(lastSync).getTime()) < 60000
 
@@ -187,7 +178,26 @@ function ProgressRing({ completed, total, size = 28, strokeWidth = 3 }) {
   )
 }
 
-export default function StatsHeader({ stats, sparklines, currentTime, dataSource, lastSync, isSyncing, onRefresh, lastRunTime, theme, onToggleTheme, onRunAgents, runningAgents, onOpenSettings, onOpenMetrics, onOpenComparison, onOpenCalendarHeatmap, onOpenTimeline, onToggleFocusMode, focusModeActive, onPlanCampaign, planningCampaign, onToggleSidebar, onToggleFeed, notificationSlot, pipelineSlot, productivitySlot }) {
+/**
+ * StatsHeader — top bar with stats, sync state, actions, and layout controls.
+ *
+ * Props are grouped into five logical buckets to keep the callsite scannable:
+ *   data     — display data (stats, sparklines, currentTime, dataSource, lastSync, lastRunTime)
+ *   sync     — data-refresh state (isSyncing, onRefresh)
+ *   actions  — primary CTA buttons (run agents, plan campaign)
+ *   panels   — callbacks that open modal panels
+ *   ui       — theme, layout toggles, focus mode
+ *   slots    — injected render slots for notification, pipeline badge, productivity score
+ */
+export default function StatsHeader({ data = {}, sync = {}, actions = {}, panels = {}, ui = {}, slots = {} }) {
+  // Destructure grouped props — keeps the JSX below identical to before
+  const { stats = {}, sparklines, currentTime, dataSource, lastSync, lastRunTime } = data
+  const { isSyncing, onRefresh } = sync
+  const { onRunAgents, runningAgents, onPlanCampaign, planningCampaign } = actions
+  const { onOpenSettings, onOpenMetrics, onOpenComparison, onOpenCalendarHeatmap, onOpenTimeline } = panels
+  const { theme, onToggleTheme, focusModeActive, onToggleFocusMode, onToggleSidebar, onToggleFeed } = ui
+  const { notification: notificationSlot, pipeline: pipelineSlot, productivity: productivitySlot } = slots
+
   const formatTime = (date) => {
     return date.toLocaleTimeString('en-US', {
       hour: '2-digit',
