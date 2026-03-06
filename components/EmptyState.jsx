@@ -1,5 +1,7 @@
 'use client'
 
+import { memo } from 'react'
+
 /**
  * EmptyState — Illustrated empty state for when lists/views have no data
  *
@@ -157,7 +159,7 @@ const VARIANTS = {
   },
 }
 
-export default function EmptyState({
+const EmptyState = memo(function EmptyState({
   variant = 'generic',
   title,
   message,
@@ -195,4 +197,6 @@ export default function EmptyState({
       )}
     </div>
   )
-}
+})
+
+export default EmptyState

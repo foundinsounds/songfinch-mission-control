@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, memo } from 'react'
 
-export default function SearchBar({ value, onChange, resultCount, totalCount }) {
+const SearchBar = memo(function SearchBar({ value, onChange, resultCount, totalCount }) {
   const inputRef = useRef(null)
 
   // Cmd/Ctrl+F focuses the search bar
@@ -66,4 +66,6 @@ export default function SearchBar({ value, onChange, resultCount, totalCount }) 
       )}
     </div>
   )
-}
+})
+
+export default SearchBar

@@ -1,5 +1,7 @@
 'use client'
 
+import { memo } from 'react'
+
 /**
  * Breadcrumb — Contextual navigation trail for the Roundtable SPA.
  *
@@ -75,7 +77,7 @@ function ChevronSeparator() {
   )
 }
 
-export default function Breadcrumb({
+const Breadcrumb = memo(function Breadcrumb({
   currentView = 'kanban',
   selectedAgent = null,
   selectedTask = null,
@@ -165,4 +167,6 @@ export default function Breadcrumb({
       </ol>
     </nav>
   )
-}
+})
+
+export default Breadcrumb

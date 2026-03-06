@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, memo } from 'react'
 
 /**
  * FaviconBadge - Headless component that shows review task count
@@ -8,7 +8,7 @@ import { useEffect, useRef } from 'react'
  *
  * Renders nothing (returns null). Side effects only via useEffect.
  */
-export default function FaviconBadge({ tasks }) {
+const FaviconBadge = memo(function FaviconBadge({ tasks }) {
   const originalFavicon = useRef(null)
   const originalTitle = useRef(null)
   const lastCount = useRef(-1)
@@ -136,4 +136,6 @@ export default function FaviconBadge({ tasks }) {
   }, [])
 
   return null
-}
+})
+
+export default FaviconBadge

@@ -1,5 +1,7 @@
 'use client'
 
+import { memo } from 'react'
+
 /**
  * ProgressBar — Animated progress indicators for stats and completion tracking
  *
@@ -171,10 +173,12 @@ export function SegmentedProgress({ segments = [], height = 8, showLabels = true
 }
 
 // ---- Main Export ----
-export default function ProgressBar({ variant = 'bar', ...props }) {
+const ProgressBar = memo(function ProgressBar({ variant = 'bar', ...props }) {
   switch (variant) {
     case 'ring': return <RingProgress {...props} />
     case 'mini': return <MiniProgress {...props} />
     default: return <BarProgress {...props} />
   }
-}
+})
+
+export default ProgressBar

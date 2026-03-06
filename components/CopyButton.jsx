@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, memo } from 'react'
 
 /**
  * CopyButton — Copy text to clipboard with visual feedback
@@ -14,7 +14,7 @@ import { useState, useCallback } from 'react'
  *   <CopyButton text={task.output} />
  *   <CopyButton text={content} variant="button" label="Copy Output" />
  */
-export default function CopyButton({
+const CopyButton = memo(function CopyButton({
   text,
   variant = 'icon',
   label = 'Copy',
@@ -116,7 +116,9 @@ export default function CopyButton({
       {copied ? '\u2713' : '\u{1F4CB}'}
     </span>
   )
-}
+})
+
+export default CopyButton
 
 /**
  * Hook for clipboard operations without a UI component
