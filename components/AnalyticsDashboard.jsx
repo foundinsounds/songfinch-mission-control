@@ -105,6 +105,17 @@ function TerritoryCard({ territory }) {
 
 // ── MAIN DASHBOARD ────────────────────────────────
 
+const TABS = [
+  { key: 'overview', label: 'Overview', icon: '📊' },
+  { key: 'agents', label: 'Agent Performance', icon: '🤖' },
+  { key: 'territories', label: 'Emotional Territories', icon: '🎯' },
+  { key: 'quality', label: 'Quality & Pipeline', icon: '⭐' },
+  { key: 'visuals', label: 'Visuals & Calendar', icon: '🎨' },
+  { key: 'intelligence', label: 'Intelligence', icon: '🧠' },
+  { key: 'orgchart', label: 'Org Chart', icon: '🏛️' },
+  { key: 'office', label: 'Agent Office', icon: '🏢' },
+]
+
 export default function AnalyticsDashboard({ agents, tasks, activity, onConfigAgent }) {
   const [liveStats, setLiveStats] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -170,17 +181,6 @@ export default function AnalyticsDashboard({ agents, tasks, activity, onConfigAg
   }, [tasks, agents])
 
   const s = liveStats || localStats
-
-  const TABS = [
-    { key: 'overview', label: 'Overview', icon: '\u{1F4CA}' },
-    { key: 'agents', label: 'Agent Performance', icon: '\u{1F916}' },
-    { key: 'territories', label: 'Emotional Territories', icon: '\u{1F3AF}' },
-    { key: 'quality', label: 'Quality & Pipeline', icon: '\u{2B50}' },
-    { key: 'visuals', label: 'Visuals & Calendar', icon: '\u{1F3A8}' },
-    { key: 'intelligence', label: 'Intelligence', icon: '\u{1F9E0}' },
-    { key: 'orgchart', label: 'Org Chart', icon: '🏛️' },
-    { key: 'office', label: 'Agent Office', icon: '\u{1F3E2}' },
-  ]
 
   return (
     <div className="p-6 overflow-y-auto h-full">

@@ -206,6 +206,14 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
   const [diffVersionIndex, setDiffVersionIndex] = useState(0) // which revision to compare against latest
   const [isEditing, setIsEditing] = useState(false)
   const [editFields, setEditFields] = useState({ name: task.name || '', description: task.description || '', contentType: task.contentType || '', priority: task.priority || 'Medium' })
+
+  // Resync edit fields when navigating between tasks (j/k keys)
+  useEffect(() => {
+    if (!isEditing) {
+      setEditFields({ name: task.name || '', description: task.description || '', contentType: task.contentType || '', priority: task.priority || 'Medium' })
+    }
+  }, [task.id]) // eslint-disable-line react-hooks/exhaustive-deps — intentionally only on task.id change
+
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState(null)
   const [exportingToDrive, setExportingToDrive] = useState(false)
@@ -214,7 +222,6 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
 
   // Keyboard navigation: ↑/↓ or j/k to cycle tasks without closing modal
   const handleKeyNav = useCallback((e) => {
-    // Don't intercept when typing in inputs/textareas
     if (e.key === 'Escape') {
       e.preventDefault()
       onClose()
@@ -274,12 +281,13 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
     return computeDiff(oldVersion.content, latestOutput)
   }, [hasRevisions, latestOutput, revisions, diffVersionIndex])
 
-  // Diff stats
+  // Diff stats (single-pass reduce)
   const diffStats = useMemo(() => {
-    const added = diffResult.filter(d => d.type === 'added').length
-    const removed = diffResult.filter(d => d.type === 'removed').length
-    const same = diffResult.filter(d => d.type === 'same').length
-    return { added, removed, same, total: added + removed + same }
+    const counts = diffResult.reduce((acc, d) => {
+      acc[d.type] = (acc[d.type] || 0) + 1
+      return acc
+    }, {})
+    return { added: counts.added || 0, removed: counts.removed || 0, same: counts.same || 0, total: diffResult.length }
   }, [diffResult])
 
   const handleApprove = async () => {
@@ -440,9 +448,10 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
             )}
             <button
               onClick={onClose}
+              aria-label="Close task details"
               className="text-gray-500 hover:text-white transition-colors p-1"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>

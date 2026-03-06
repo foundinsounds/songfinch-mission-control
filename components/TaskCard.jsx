@@ -620,9 +620,11 @@ function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChang
       </h3>
 
       {/* Description Preview */}
-      <p className="text-[11px] text-gray-500 leading-relaxed mb-3 line-clamp-2">
-        <HighlightText text={task.description} query={searchQuery} />
-      </p>
+      {task.description && (
+        <p className="text-[11px] text-gray-500 leading-relaxed mb-3 line-clamp-2">
+          <HighlightText text={task.description} query={searchQuery} />
+        </p>
+      )}
 
       {/* Content Preview Thumbnail */}
       {task.contentType && task.output && (

@@ -75,7 +75,6 @@ export default function Roundtable() {
   const [selectedAgent, setSelectedAgent] = useState(null)
   const [configAgent, setConfigAgent] = useState(null)
   const [selectedTask, setSelectedTask] = useState(null)
-  const [currentTime, setCurrentTime] = useState(new Date())
   const [feedFilter, setFeedFilter] = useState('All')
   const [dataSource, setDataSource] = useState('loading')
   // lastSync and isSyncing state moved to useDataFetching hook
@@ -146,12 +145,6 @@ export default function Roundtable() {
     fetch('/api/system').then(r => r.json()).then(d => {
       if (d.paused !== undefined) setSystemPaused(d.paused)
     }).catch(() => {})
-  }, [])
-
-  // Clock
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
-    return () => clearInterval(timer)
   }, [])
 
   // Handle agent config update (optimistic UI)
@@ -278,7 +271,7 @@ export default function Roundtable() {
     return result
   }, [])
 
-  const stats = {
+  const stats = useMemo(() => ({
     agentsActive: agents.filter(a => a.status === 'Working' || a.status === 'Active').length,
     totalAgents: agents.length,
     tasksInQueue: tasks.filter(t => t.status !== 'Done').length,
@@ -286,7 +279,7 @@ export default function Roundtable() {
     inReview: tasks.filter(t => t.status === 'Review').length,
     completed: tasks.filter(t => t.status === 'Done').length,
     contentPieces: tasks.filter(t => t.status === 'Done').length,
-  }
+  }), [agents, tasks])
 
   const sparklines = useMemo(() => ({
     queue: generateSparkTrend(stats.tasksInQueue, 1),
@@ -294,6 +287,30 @@ export default function Roundtable() {
     done: generateSparkTrend(stats.completed, 3, 0.25),
     content: generateSparkTrend(stats.contentPieces, 4, 0.25),
   }), [stats.tasksInQueue, stats.inReview, stats.completed, stats.contentPieces, generateSparkTrend])
+
+  // Shared derived count — used in ViewSwitcher + MobileBottomNav
+  const inboxCount = useMemo(() => tasks.filter(t => t.status !== 'Done' && t.status !== 'Archived').length, [tasks])
+
+  // Stabilize TaskModal navigation props so React.memo can skip re-renders
+  const selectedTaskNavigation = useMemo(() => {
+    if (!selectedTask || navigableTasks.length === 0) {
+      return { taskPosition: null, onNextTask: null, onPrevTask: null }
+    }
+    const idx = navigableTasks.findIndex(t => t.id === selectedTask.id)
+    return {
+      taskPosition: { current: idx + 1, total: navigableTasks.length },
+      onNextTask: idx < navigableTasks.length - 1 ? navigableTasks[idx + 1] : null,
+      onPrevTask: idx > 0 ? navigableTasks[idx - 1] : null,
+    }
+  }, [selectedTask, navigableTasks])
+
+  const handleNextTask = useCallback(() => {
+    if (selectedTaskNavigation.onNextTask) setSelectedTask(selectedTaskNavigation.onNextTask)
+  }, [selectedTaskNavigation.onNextTask])
+
+  const handlePrevTask = useCallback(() => {
+    if (selectedTaskNavigation.onPrevTask) setSelectedTask(selectedTaskNavigation.onPrevTask)
+  }, [selectedTaskNavigation.onPrevTask])
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
@@ -313,7 +330,7 @@ export default function Roundtable() {
       )}
       {/* Top Header Bar */}
       <StatsHeader
-        data={{ stats, sparklines, currentTime, dataSource, lastSync }}
+        data={{ stats, sparklines, dataSource, lastSync }}
         sync={{ isSyncing, onRefresh: fetchData }}
         actions={{
           onRunAgents: handleRunAgents, runningAgents,
@@ -380,7 +397,7 @@ export default function Roundtable() {
           )}
 
           {/* View Switcher — Primary tabs + More dropdown */}
-          <ViewSwitcher currentView={currentView} onViewChange={setCurrentView} inReview={stats.inReview} inboxCount={tasks.filter(t => t.status !== 'Done' && t.status !== 'Archived').length} />
+          <ViewSwitcher currentView={currentView} onViewChange={setCurrentView} inReview={stats.inReview} inboxCount={inboxCount} />
 
           {/* Quick Create Bar — inline keyboard-driven task creation */}
           <QuickCreateBar
@@ -661,7 +678,7 @@ export default function Roundtable() {
         currentView={currentView}
         onViewChange={setCurrentView}
         inReview={stats.inReview}
-        inboxCount={tasks.filter(t => t.status !== 'Done' && t.status !== 'Archived').length}
+        inboxCount={inboxCount}
         boardCount={stats.tasksInQueue}
         agentsActive={stats.agentsActive}
       />
@@ -717,17 +734,9 @@ export default function Roundtable() {
           onApprove={handleApproveTask}
           onUpdateStatus={handleUpdateTaskStatus}
           allTasks={tasks}
-          taskPosition={navigableTasks.length > 0 ? { current: navigableTasks.findIndex(t => t.id === selectedTask.id) + 1, total: navigableTasks.length } : null}
-          onNextTask={(() => {
-            const idx = navigableTasks.findIndex(t => t.id === selectedTask.id)
-            if (idx < navigableTasks.length - 1) return () => setSelectedTask(navigableTasks[idx + 1])
-            return null
-          })()}
-          onPrevTask={(() => {
-            const idx = navigableTasks.findIndex(t => t.id === selectedTask.id)
-            if (idx > 0) return () => setSelectedTask(navigableTasks[idx - 1])
-            return null
-          })()}
+          taskPosition={selectedTaskNavigation.taskPosition}
+          onNextTask={selectedTaskNavigation.onNextTask ? handleNextTask : null}
+          onPrevTask={selectedTaskNavigation.onPrevTask ? handlePrevTask : null}
           onAddDependency={(depId) => handleAddDependency(selectedTask.id, depId)}
           onRemoveDependency={(depId) => handleRemoveDependency(selectedTask.id, depId)}
           onAssignAgent={async (agent) => {

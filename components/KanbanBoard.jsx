@@ -393,13 +393,7 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
     }
     return 'comfortable'
   })
-  const [compactMode, setCompactMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('roundtable-density') || 'comfortable'
-      return saved !== 'comfortable'
-    }
-    return false
-  })
+  const compactMode = density !== 'comfortable'
   const [draggedTaskId, setDraggedTaskId] = useState(null)
   const [draggedTaskSourceCol, setDraggedTaskSourceCol] = useState(null)
   const [dragOverColumn, setDragOverColumn] = useState(null)
@@ -702,6 +696,51 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
     }, {})
   }, [visibleTasks])
 
+  // Pre-compute sorted tasks per column (avoids re-sorting inside render loop)
+  const sortedTasksByColumn = useMemo(() => {
+    const result = {}
+    orderedColumns.forEach((col) => {
+      let columnTasks = visibleTasks.filter(t => t.status === col.key)
+
+      // Apply custom sort order if available (and not priority sort)
+      if (!sortByPriority && customOrder[col.key]?.length > 0) {
+        const order = customOrder[col.key]
+        columnTasks = [...columnTasks].sort((a, b) => {
+          const aIdx = order.indexOf(a.id)
+          const bIdx = order.indexOf(b.id)
+          if (aIdx === -1 && bIdx === -1) return 0
+          if (aIdx === -1) return 1
+          if (bIdx === -1) return -1
+          return aIdx - bIdx
+        })
+      }
+
+      // Sort by priority if enabled globally (overrides custom order)
+      if (sortByPriority) {
+        columnTasks = [...columnTasks].sort((a, b) =>
+          (PRIORITY_SORT[a.priority] ?? 3) - (PRIORITY_SORT[b.priority] ?? 3)
+        )
+      }
+
+      // Per-column sort (overrides global priority sort for this column)
+      const colSort = columnSorts[col.key]
+      if (colSort) {
+        columnTasks = [...columnTasks].sort((a, b) => {
+          switch (colSort) {
+            case 'priority': return (PRIORITY_SORT[a.priority] ?? 3) - (PRIORITY_SORT[b.priority] ?? 3)
+            case 'date': return (a.id || '').localeCompare(b.id || '')
+            case 'name': return (a.name || '').localeCompare(b.name || '')
+            case 'agent': return (a.agent || '').localeCompare(b.agent || '')
+            default: return 0
+          }
+        })
+      }
+
+      result[col.key] = columnTasks
+    })
+    return result
+  }, [orderedColumns, visibleTasks, sortByPriority, customOrder, columnSorts])
+
   return (
     <div className="flex flex-col h-full">
       {/* Board Controls Bar — density + sort only (filtering handled by QuickFiltersBar) */}
@@ -748,7 +787,6 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
               key={d.value}
               onClick={() => {
                 setDensity(d.value)
-                setCompactMode(d.value !== 'comfortable')
               }}
               className={`px-1.5 py-1 rounded-md transition-all flex items-center justify-center ${
                 density === d.value
@@ -792,42 +830,8 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
       {/* Kanban columns */}
       <div className="flex gap-0 flex-1 overflow-hidden">
         {orderedColumns.map((col) => {
-          let columnTasks = visibleTasks.filter(t => t.status === col.key)
+          const columnTasks = sortedTasksByColumn[col.key] || []
           const isDoneColumn = col.key === 'Done'
-
-          // Apply custom sort order if available (and not priority sort)
-          if (!sortByPriority && customOrder[col.key] && customOrder[col.key].length > 0) {
-            const order = customOrder[col.key]
-            columnTasks = [...columnTasks].sort((a, b) => {
-              const aIdx = order.indexOf(a.id)
-              const bIdx = order.indexOf(b.id)
-              if (aIdx === -1 && bIdx === -1) return 0
-              if (aIdx === -1) return 1
-              if (bIdx === -1) return -1
-              return aIdx - bIdx
-            })
-          }
-
-          // Sort by priority if enabled globally (overrides custom order)
-          if (sortByPriority) {
-            columnTasks = [...columnTasks].sort((a, b) =>
-              (PRIORITY_SORT[a.priority] ?? 3) - (PRIORITY_SORT[b.priority] ?? 3)
-            )
-          }
-
-          // Per-column sort (overrides global priority sort for this column)
-          const colSort = columnSorts[col.key]
-          if (colSort) {
-            columnTasks = [...columnTasks].sort((a, b) => {
-              switch (colSort) {
-                case 'priority': return (PRIORITY_SORT[a.priority] ?? 3) - (PRIORITY_SORT[b.priority] ?? 3)
-                case 'date': return (a.id || '').localeCompare(b.id || '') // Airtable IDs are chronological
-                case 'name': return (a.name || '').localeCompare(b.name || '')
-                case 'agent': return (a.agent || '').localeCompare(b.agent || '')
-                default: return 0
-              }
-            })
-          }
 
           const stats = pipelineStats[col.key]
           const isOverWip = col.wipLimit && columnTasks.length > col.wipLimit

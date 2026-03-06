@@ -27,6 +27,25 @@ function RoundtableLogo({ size = 22 }) {
   )
 }
 
+function LiveClock() {
+  const [now, setNow] = useState(new Date())
+
+  // Visibility-aware: pauses the 1 s tick when tab is hidden
+  useVisibilityPolling(useCallback(() => {
+    setNow(new Date())
+  }, []), 1_000)
+
+  const display = now.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+
+  return (
+    <span className="text-xs font-mono font-bold tabular-nums">{display}</span>
+  )
+}
+
 function CronCountdown() {
   const [remaining, setRemaining] = useState('')
 
@@ -191,20 +210,12 @@ function ProgressRing({ completed, total, size = 28, strokeWidth = 3 }) {
  */
 export default function StatsHeader({ data = {}, sync = {}, actions = {}, panels = {}, ui = {}, slots = {} }) {
   // Destructure grouped props — keeps the JSX below identical to before
-  const { stats = {}, sparklines, currentTime, dataSource, lastSync, lastRunTime } = data
+  const { stats = {}, sparklines, dataSource, lastSync, lastRunTime } = data
   const { isSyncing, onRefresh } = sync
   const { onRunAgents, runningAgents, onPlanCampaign, planningCampaign } = actions
   const { onOpenSettings, onOpenMetrics, onOpenComparison, onOpenCalendarHeatmap, onOpenTimeline } = panels
   const { theme, onToggleTheme, focusModeActive, onToggleFocusMode, onToggleSidebar, onToggleFeed } = ui
   const { notification: notificationSlot, pipeline: pipelineSlot, productivity: productivitySlot } = slots
-
-  const formatTime = (date) => {
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    })
-  }
 
   return (
     <header className="header-bar border-b border-dark-500 px-2 sm:px-4 py-1.5 flex items-center justify-between shrink-0 gap-2">
@@ -393,7 +404,7 @@ export default function StatsHeader({ data = {}, sync = {}, actions = {}, panels
 
         {/* Clock + Status */}
         <div className="hidden sm:flex items-center gap-2 pl-1">
-          <span className="text-xs font-mono font-bold tabular-nums">{formatTime(currentTime)}</span>
+          <LiveClock />
           <div className={`w-1.5 h-1.5 rounded-full pulse-dot ${dataSource === 'airtable' ? 'bg-accent-green' : dataSource === 'mock' ? 'bg-accent-yellow' : 'bg-gray-500'}`} />
           <span className={`text-[9px] font-semibold ${dataSource === 'airtable' ? 'text-accent-green' : dataSource === 'mock' ? 'text-accent-yellow' : 'text-gray-500'}`}>
             {dataSource === 'airtable' ? 'LIVE' : dataSource === 'mock' ? 'OFFLINE' : '...'}
