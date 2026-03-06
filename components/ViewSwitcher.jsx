@@ -45,7 +45,8 @@ export default function ViewSwitcher({ currentView, onViewChange, inReview = 0, 
   const isMoreActive = MORE_VIEWS.some(v => v.key === currentView)
 
   const getBadge = (key) => {
-    if (key === 'approvals' && inReview > 0) return inReview
+    if (key === 'approvals' && inReview > 0) return { count: inReview, color: 'bg-red-500' }
+    if (key === 'inbox' && inboxCount > 0) return { count: inboxCount, color: 'bg-accent-blue' }
     return null
   }
 
@@ -65,8 +66,8 @@ export default function ViewSwitcher({ currentView, onViewChange, inReview = 0, 
           >
             {view.icon && <span className="text-[10px]">{view.icon}</span>}
             {view.label}
-            {badge > 0 && (
-              <span className="bg-red-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-bold leading-none">{badge}</span>
+            {badge && badge.count > 0 && (
+              <span className={`${badge.color} text-white text-[8px] px-1.5 py-0.5 rounded-full font-bold leading-none`}>{badge.count}</span>
             )}
           </button>
         )

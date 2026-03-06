@@ -162,7 +162,7 @@ export default function AgentOrgChart({ agents = [], tasks = [], onAgentClick })
 
   // Pipeline flow summary
   const pipelineSummary = useMemo(() => {
-    const planned = tasks.filter(t => t.status === 'Planned').length
+    const planned = tasks.filter(t => t.status === 'Inbox').length
     const assigned = tasks.filter(t => t.status === 'Assigned').length
     const inProgress = tasks.filter(t => t.status === 'In Progress').length
     const review = tasks.filter(t => t.status === 'Review').length
@@ -195,7 +195,7 @@ export default function AgentOrgChart({ agents = [], tasks = [], onAgentClick })
         </div>
         <div className="flex items-center gap-0.5">
           {[
-            { label: 'Planned', count: pipelineSummary.planned, color: 'bg-blue-500' },
+            { label: 'Inbox', count: pipelineSummary.planned, color: 'bg-blue-500' },
             { label: 'Assigned', count: pipelineSummary.assigned, color: 'bg-purple-500' },
             { label: 'In Progress', count: pipelineSummary.inProgress, color: 'bg-accent-orange' },
             { label: 'Review', count: pipelineSummary.review, color: 'bg-amber-500' },
@@ -248,20 +248,50 @@ export default function AgentOrgChart({ agents = [], tasks = [], onAgentClick })
           </div>
 
           {/* TIER 3: SPECIALIST SQUADS */}
-          <div className="grid grid-cols-4 gap-4 w-full max-w-[750px] mt-2">
-            {SQUADS.map(squad => (
-              <div
-                key={squad.name}
-                className={`rounded-lg border ${squad.color} ${squad.bg} p-3 flex flex-col items-center gap-2`}
-              >
-                <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                  {squad.name}
-                </span>
-                {squad.agents.map(agentName => (
-                  <AgentNode key={agentName} {...nodeProps(agentName)} />
-                ))}
-              </div>
-            ))}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 w-full max-w-[750px] mt-2">
+            {SQUADS.map(squad => {
+              const squadTasks = squad.agents.reduce((sum, a) => sum + (agentTaskCounts.counts[a] || 0), 0)
+              const squadReviews = squad.agents.reduce((sum, a) => sum + (agentTaskCounts.reviews[a] || 0), 0)
+              const squadScores = squad.agents
+                .filter(a => agentScores[a] != null)
+                .map(a => agentScores[a])
+              const avgSquadScore = squadScores.length > 0
+                ? Math.round((squadScores.reduce((a, b) => a + b, 0) / squadScores.length) * 10) / 10
+                : null
+              return (
+                <div
+                  key={squad.name}
+                  className={`rounded-lg border ${squad.color} ${squad.bg} p-3 flex flex-col items-center gap-2`}
+                >
+                  <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider">
+                    {squad.name}
+                  </span>
+                  {/* Squad summary metrics */}
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[8px] bg-dark-600/80 px-1.5 py-0.5 rounded text-gray-400">
+                      {squadTasks} tasks
+                    </span>
+                    {squadReviews > 0 && (
+                      <span className="text-[8px] bg-amber-500/15 px-1.5 py-0.5 rounded text-amber-400">
+                        {squadReviews} review
+                      </span>
+                    )}
+                    {avgSquadScore !== null && (
+                      <span className={`text-[8px] px-1.5 py-0.5 rounded font-semibold ${
+                        avgSquadScore >= 4 ? 'bg-accent-green/15 text-accent-green'
+                          : avgSquadScore >= 3 ? 'bg-amber-500/15 text-amber-400'
+                          : 'bg-red-500/15 text-red-400'
+                      }`}>
+                        ★ {avgSquadScore}
+                      </span>
+                    )}
+                  </div>
+                  {squad.agents.map(agentName => (
+                    <AgentNode key={agentName} {...nodeProps(agentName)} />
+                  ))}
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
