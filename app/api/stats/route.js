@@ -116,7 +116,8 @@ export async function GET() {
       // Extract territory from description metadata
       const territoryMatch = t.description?.match(/Territory:\s*(Celebration|Gratitude|Memory|Identity|Tribute)/i)
       if (territoryMatch) {
-        const terr = territoryMatch[1]
+        // Normalize case: regex /i flag means match[1] preserves original case
+        const terr = territoryMatch[1].charAt(0).toUpperCase() + territoryMatch[1].slice(1).toLowerCase()
         territories[terr] = (territories[terr] || 0) + 1
         if (t.status === 'Done') {
           territoryDone[terr] = (territoryDone[terr] || 0) + 1
