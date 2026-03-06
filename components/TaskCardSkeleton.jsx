@@ -1,13 +1,17 @@
 'use client'
 
+import { memo } from 'react'
+
 /**
  * TaskCardSkeleton — Shimmer loading placeholder that mimics TaskCard layout.
  * Renders pulsing bars matching the card's visual structure.
  *
+ * Wrapped in React.memo — pure presentational component.
+ *
  * @param {Object} props
  * @param {boolean} [props.compact=false] — render compact variant
  */
-export default function TaskCardSkeleton({ compact = false }) {
+function TaskCardSkeleton({ compact = false }) {
   if (compact) {
     return (
       <div className="task-card-skeleton p-2 rounded-md bg-dark-700/50 border border-dark-500/50 animate-pulse">
@@ -52,7 +56,9 @@ export default function TaskCardSkeleton({ compact = false }) {
  * @param {number} [props.count=3] — number of skeleton cards
  * @param {boolean} [props.compact=false] — compact mode
  */
-export function SkeletonColumn({ count = 3, compact = false }) {
+export default memo(TaskCardSkeleton)
+
+export const SkeletonColumn = memo(function SkeletonColumn({ count = 3, compact = false }) {
   return (
     <div className={compact ? 'space-y-1' : 'space-y-3'}>
       {Array.from({ length: count }).map((_, i) => (
@@ -60,4 +66,4 @@ export function SkeletonColumn({ count = 3, compact = false }) {
       ))}
     </div>
   )
-}
+})

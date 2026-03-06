@@ -165,8 +165,7 @@ export default function Roundtable() {
   const handleRunAgents = useCallback(async () => {
     setRunningAgents(true)
     try {
-      const res = await fetch('/api/cron/run-agents')
-      const data = await res.json()
+      await fetch('/api/cron/run-agents')
       showToast('Agents dispatched', 'success')
       // Refresh data after agents run
       setTimeout(fetchData, 2000)
@@ -182,8 +181,7 @@ export default function Roundtable() {
   const handlePlanCampaign = useCallback(async () => {
     setPlanningCampaign(true)
     try {
-      const res = await fetch('/api/campaigns/plan', { method: 'POST' })
-      const data = await res.json()
+      await fetch('/api/campaigns/plan', { method: 'POST' })
       showToast('Campaign plan created', 'success')
       setTimeout(fetchData, 2000)
     } catch (err) {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, memo } from 'react'
 import { AGENTS } from '../lib/agents'
 import { STATUS_STYLES } from '../lib/constants'
 import { TaskTimeInline } from './TaskTimeTracker'
@@ -397,7 +397,7 @@ const DENSITY_CONFIG = {
   },
 }
 
-export default function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChanges, onRetry, compact, density = 'comfortable', isSelected, onToggleSelect, allTasks = [], isFocused, searchQuery = '', animationIndex = 0 }) {
+function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChanges, onRetry, compact, density = 'comfortable', isSelected, onToggleSelect, allTasks = [], isFocused, searchQuery = '', animationIndex = 0 }) {
   const agent = task.agent ? AGENTS.find(a => a.name === task.agent) : null
   const isDone = task.status === 'Done'
   const isReview = task.status === 'Review'
@@ -873,3 +873,5 @@ export default function TaskCard({ task, onClick, onContextMenu, onQuickApprove,
     </div>
   )
 }
+
+export default memo(TaskCard)

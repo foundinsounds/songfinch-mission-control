@@ -1,8 +1,12 @@
 'use client'
 
+import { memo, useId } from 'react'
+
 /**
  * MiniSparkline — A tiny SVG sparkline chart for inline trend visualization.
  * Renders a smooth polyline within a compact viewBox.
+ *
+ * Wrapped in React.memo — pure component that only re-renders when props change.
  *
  * @param {Object} props
  * @param {number[]} props.data — array of numeric values
@@ -11,7 +15,7 @@
  * @param {number} [props.height=16] — SVG height in px
  * @param {boolean} [props.filled=false] — show gradient fill under line
  */
-export default function MiniSparkline({ data = [], color = '#f97316', width = 48, height = 16, filled = false }) {
+function MiniSparkline({ data = [], color = '#f97316', width = 48, height = 16, filled = false }) {
   if (!data || data.length < 2) return null
 
   const padding = 1
@@ -28,8 +32,8 @@ export default function MiniSparkline({ data = [], color = '#f97316', width = 48
     return `${x.toFixed(1)},${y.toFixed(1)}`
   }).join(' ')
 
-  // Generate unique gradient id per instance
-  const gradId = `spark-grad-${Math.random().toString(36).slice(2, 8)}`
+  // Stable unique gradient id per component instance (replaces Math.random)
+  const gradId = useId()
 
   // Area fill path (line down to bottom, across, back up)
   const firstPoint = data[0]
@@ -77,3 +81,5 @@ export default function MiniSparkline({ data = [], color = '#f97316', width = 48
     </svg>
   )
 }
+
+export default memo(MiniSparkline)
