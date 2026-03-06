@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, createContext, useContext } from 'react'
+import { useState, useEffect, useCallback, createContext, useContext, memo } from 'react'
 
 // ---- Toast Context ----
 const ToastContext = createContext(null)
@@ -91,7 +91,7 @@ function ToastContainer({ toasts, onRemove }) {
 }
 
 // ---- Individual Toast ----
-function ToastItem({ toast, onRemove }) {
+const ToastItem = memo(function ToastItem({ toast, onRemove }) {
   const [isExiting, setIsExiting] = useState(false)
   const [progress, setProgress] = useState(100)
   const colors = COLORS[toast.type] || COLORS.info
@@ -222,6 +222,6 @@ function ToastItem({ toast, onRemove }) {
       )}
     </div>
   )
-}
+})
 
 export default ToastProvider
