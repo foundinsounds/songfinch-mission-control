@@ -1,7 +1,6 @@
 // Task Duplication API — clones a task with a new name
 import { getTasks, createTask } from '../../../../lib/airtable'
-import { NextResponse } from 'next/server'
-import { safeJsonParse } from '../../../../lib/api-utils'
+import { safeJsonParse, badRequest, successResponse, apiError } from '../../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,14 +10,14 @@ export async function POST(request) {
     if (error) return error
     const { taskId } = body
     if (!taskId) {
-      return NextResponse.json({ error: 'taskId required' }, { status: 400 })
+      return badRequest('taskId required')
     }
 
     // Fetch all tasks, find the source
     const allTasks = await getTasks({ noCache: true })
     const source = allTasks.find(t => t.id === taskId)
     if (!source) {
-      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+      return apiError('DUPLICATE', { message: 'Task not found' }, 404)
     }
 
     // Build clone fields — reset status, keep most metadata
@@ -41,14 +40,13 @@ export async function POST(request) {
 
     const result = await createTask(cloneFields)
 
-    return NextResponse.json({
+    return successResponse({
       success: true,
       id: result?.records?.[0]?.id,
       name: cloneFields['Task Name'],
       message: `Cloned "${source.name}" → "${cloneFields['Task Name']}"`,
     })
   } catch (err) {
-    console.error('[DUPLICATE] Error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return apiError('DUPLICATE', err)
   }
 }

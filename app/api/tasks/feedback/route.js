@@ -1,6 +1,5 @@
 import { updateTask, addActivity } from '../../../../lib/airtable'
-import { NextResponse } from 'next/server'
-import { safeJsonParse } from '../../../../lib/api-utils'
+import { safeJsonParse, badRequest, successResponse, apiError } from '../../../../lib/api-utils'
 
 export async function POST(request) {
   try {
@@ -9,10 +8,7 @@ export async function POST(request) {
     const { recordId, feedback, currentOutput, taskName, agentName } = body
 
     if (!recordId || !feedback) {
-      return NextResponse.json(
-        { error: 'recordId and feedback are required' },
-        { status: 400 }
-      )
+      return badRequest('recordId and feedback are required')
     }
 
     // Count existing revisions to determine version number
@@ -45,16 +41,12 @@ export async function POST(request) {
       'Type': 'Comment',
     }).catch(err => console.warn('[FEEDBACK] Activity log failed:', err.message))
 
-    return NextResponse.json({
+    return successResponse({
       success: true,
       message: `Task sent back for revision (v${currentVersion + 1})`,
       version: currentVersion + 1,
     })
   } catch (error) {
-    console.error('Feedback error:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to submit feedback' },
-      { status: 500 }
-    )
+    return apiError('FEEDBACK', error)
   }
 }

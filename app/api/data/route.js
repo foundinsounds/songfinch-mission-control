@@ -1,5 +1,5 @@
 import { getAgents, getTasks, getActivityFeed } from '../../../lib/airtable'
-import { NextResponse } from 'next/server'
+import { successResponse } from '../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,11 +19,10 @@ export async function GET() {
     safeFetch(getActivityFeed, 'activity'),
   ])
 
-  return NextResponse.json({
+  return successResponse({
     agents,
     tasks,
     activity,
-    timestamp: new Date().toISOString(),
     partial: agents.length === 0 || tasks.length === 0,
   })
 }

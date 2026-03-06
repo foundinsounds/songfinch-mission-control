@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 
 function priorityScore(task) {
   let score = 0
@@ -28,8 +28,10 @@ function getTimeAgo(dateStr) {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-export default function SmartInbox({ tasks, agents, onTaskClick }) {
+export default function SmartInbox({ tasks, agents, onTaskClick, onRefresh }) {
   const [filter, setFilter] = useState('all') // all, needs-review, new, stale
+  const [archiving, setArchiving] = useState(new Set())
+  const [bulkArchiving, setBulkArchiving] = useState(false)
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window === 'undefined') return new Set()
     const saved = localStorage.getItem('roundtable-inbox-dismissed')
@@ -47,6 +49,53 @@ export default function SmartInbox({ tasks, agents, onTaskClick }) {
     setDismissed(new Set())
     localStorage.removeItem('roundtable-inbox-dismissed')
   }
+
+  const archiveOne = useCallback(async (taskId) => {
+    setArchiving(prev => new Set(prev).add(taskId))
+    try {
+      const res = await fetch('/api/tasks/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId }),
+      })
+      if (res.ok) {
+        dismiss(taskId) // Also dismiss from local view immediately
+        onRefresh?.()
+      }
+    } catch (err) {
+      console.warn('[INBOX] Archive failed:', err.message)
+    } finally {
+      setArchiving(prev => {
+        const next = new Set(prev)
+        next.delete(taskId)
+        return next
+      })
+    }
+  }, [onRefresh])
+
+  const archiveStale = useCallback(async () => {
+    const staleIds = tasks
+      .filter(t => t.status === 'Inbox' && t.createdAt && (Date.now() - new Date(t.createdAt).getTime()) > 24 * 60 * 60 * 1000)
+      .map(t => t.id)
+    if (staleIds.length === 0) return
+
+    setBulkArchiving(true)
+    try {
+      const res = await fetch('/api/tasks/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskIds: staleIds }),
+      })
+      if (res.ok) {
+        staleIds.forEach(id => dismiss(id))
+        onRefresh?.()
+      }
+    } catch (err) {
+      console.warn('[INBOX] Bulk archive failed:', err.message)
+    } finally {
+      setBulkArchiving(false)
+    }
+  }, [tasks, onRefresh])
 
   const inboxItems = useMemo(() => {
     // Only show actionable tasks (not Done, not dismissed)
@@ -97,6 +146,12 @@ export default function SmartInbox({ tasks, agents, onTaskClick }) {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {counts.stale > 0 && (
+            <button onClick={archiveStale} disabled={bulkArchiving}
+              className="text-[10px] px-2 py-1 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20 transition-colors disabled:opacity-50">
+              {bulkArchiving ? 'Archiving...' : `Archive ${counts.stale} stale`}
+            </button>
+          )}
           {dismissed.size > 0 && (
             <button onClick={clearDismissed}
               className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors">
@@ -125,8 +180,9 @@ export default function SmartInbox({ tasks, agents, onTaskClick }) {
       <div className="flex-1 overflow-y-auto">
         {inboxItems.map(task => {
           const agent = agents.find(a => a.name === task.agent)
+          const isArchiving = archiving.has(task.id)
           return (
-            <div key={task.id} className="px-4 py-3 border-b border-dark-500/50 hover:bg-dark-700/50 transition-colors group">
+            <div key={task.id} className={`px-4 py-3 border-b border-dark-500/50 hover:bg-dark-700/50 transition-colors group ${isArchiving ? 'opacity-50' : ''}`}>
               <div className="flex items-start gap-3">
                 {/* Priority indicator */}
                 <div className={`w-1.5 h-8 rounded-full shrink-0 mt-0.5 ${
@@ -167,9 +223,14 @@ export default function SmartInbox({ tasks, agents, onTaskClick }) {
                     className="text-[10px] px-2 py-1 bg-accent-orange/20 text-accent-orange rounded hover:bg-accent-orange/30 transition-colors">
                     Open
                   </button>
+                  <button onClick={() => archiveOne(task.id)} disabled={isArchiving}
+                    className="text-[10px] px-2 py-1 text-red-400/70 rounded hover:bg-red-500/10 hover:text-red-400 transition-colors disabled:opacity-50"
+                    title="Archive task (mark as Done)">
+                    Archive
+                  </button>
                   <button onClick={() => dismiss(task.id)}
                     className="text-[10px] px-2 py-1 text-gray-500 rounded hover:bg-dark-600 hover:text-gray-300 transition-colors">
-                    Dismiss
+                    Hide
                   </button>
                 </div>
               </div>

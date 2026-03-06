@@ -1,12 +1,11 @@
 import { getContentLibrary } from '../../../lib/airtable'
-import { NextResponse } from 'next/server'
+import { successResponse, apiError } from '../../../lib/api-utils'
 
 export async function GET() {
   try {
     const content = await getContentLibrary()
-    return NextResponse.json({ content })
+    return successResponse({ content })
   } catch (err) {
-    console.error('Content API error:', err)
-    return NextResponse.json({ error: err.message, content: [] }, { status: 500 })
+    return apiError('CONTENT', err)
   }
 }

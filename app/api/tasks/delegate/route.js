@@ -2,8 +2,7 @@
 // Delegation creates a sub-task assigned to another agent with context from the original
 
 import { createTask, addActivity } from '../../../../lib/airtable'
-import { NextResponse } from 'next/server'
-import { safeJsonParse } from '../../../../lib/api-utils'
+import { safeJsonParse, badRequest, successResponse, apiError } from '../../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,10 +24,7 @@ export async function POST(request) {
     } = body
 
     if (!fromAgent || !toAgent || !taskName) {
-      return NextResponse.json(
-        { error: 'fromAgent, toAgent, and taskName are required' },
-        { status: 400 }
-      )
+      return badRequest('fromAgent, toAgent, and taskName are required')
     }
 
     // Build enriched description with delegation context
@@ -69,13 +65,12 @@ export async function POST(request) {
       'Type': 'Task Created',
     })
 
-    return NextResponse.json({
+    return successResponse({
       success: true,
       task: result,
       message: `Task "${taskName}" delegated from ${fromAgent} to ${toAgent}`,
     })
   } catch (error) {
-    console.error('[DELEGATE] Error:', error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError('DELEGATE', error)
   }
 }

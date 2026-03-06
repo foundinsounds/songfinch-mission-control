@@ -1,6 +1,5 @@
 import { updateAgent } from '../../../../lib/airtable'
-import { NextResponse } from 'next/server'
-import { safeJsonParse } from '../../../../lib/api-utils'
+import { safeJsonParse, badRequest, successResponse, apiError } from '../../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,17 +10,11 @@ export async function POST(request) {
     const { recordId, fields } = body
 
     if (!recordId) {
-      return NextResponse.json(
-        { error: 'recordId is required' },
-        { status: 400 }
-      )
+      return badRequest('recordId is required')
     }
 
     if (!fields || Object.keys(fields).length === 0) {
-      return NextResponse.json(
-        { error: 'fields object is required and must not be empty' },
-        { status: 400 }
-      )
+      return badRequest('fields object is required and must not be empty')
     }
 
     // Map frontend field names to Airtable field names
@@ -44,16 +37,11 @@ export async function POST(request) {
 
     const result = await updateAgent(recordId, airtableFields)
 
-    return NextResponse.json({
+    return successResponse({
       success: true,
       record: result,
     })
   } catch (error) {
-    console.error('Agent update error:', error.message)
-    // Return the actual Airtable error message for debugging
-    return NextResponse.json(
-      { error: error.message, details: 'Check Airtable field names: Status, Model, Temperature, System Prompt' },
-      { status: 500 }
-    )
+    return apiError('AGENT_UPDATE', error)
   }
 }

@@ -2,8 +2,7 @@
 // Enhanced: relevance scoring, context-based retrieval, importance decay
 // Stores: feedback patterns, successful strategies, content preferences, learnings
 
-import { NextResponse } from 'next/server'
-import { safeJsonParse } from '../../../lib/api-utils'
+import { safeJsonParse, badRequest, successResponse, apiError } from '../../../lib/api-utils'
 
 const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY
 const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
@@ -129,10 +128,9 @@ export async function GET(request) {
       memories = memories.slice(0, limit)
     }
 
-    return NextResponse.json({ memories, total: data.records.length, ranked: ranked || !!contentType || !!query })
+    return successResponse({ memories, total: data.records.length, ranked: ranked || !!contentType || !!query })
   } catch (error) {
-    console.error('[MEMORY] GET error:', error.message)
-    return NextResponse.json({ memories: [], error: error.message })
+    return apiError('MEMORY_GET', error)
   }
 }
 
@@ -144,7 +142,7 @@ export async function POST(request) {
     const { agent, type, content, source, importance, taskContext } = body
 
     if (!agent || !content) {
-      return NextResponse.json({ error: 'agent and content are required' }, { status: 400 })
+      return badRequest('agent and content are required')
     }
 
     // Deduplication: check if a very similar memory already exists
@@ -157,7 +155,7 @@ export async function POST(request) {
     try {
       const existing = await airtableRequest(`${BASE_URL}?${dedupeParams.toString()}`)
       if (existing.records?.length > 0) {
-        return NextResponse.json({
+        return successResponse({
           success: true,
           deduplicated: true,
           message: 'Similar memory already exists, skipping',
@@ -182,10 +180,9 @@ export async function POST(request) {
       body: JSON.stringify({ records: [{ fields }] }),
     })
 
-    return NextResponse.json({ success: true, record: data.records?.[0] })
+    return successResponse({ success: true, record: data.records?.[0] })
   } catch (error) {
-    console.error('[MEMORY] POST error:', error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError('MEMORY_POST', error)
   }
 }
 
@@ -197,7 +194,7 @@ export async function DELETE(request) {
     const maxAgeDays = parseInt(searchParams.get('maxAgeDays') || '60', 10)
 
     if (!agent) {
-      return NextResponse.json({ error: 'agent is required' }, { status: 400 })
+      return badRequest('agent is required')
     }
 
     // Fetch all memories for this agent
@@ -235,7 +232,7 @@ export async function DELETE(request) {
       }
     }
 
-    return NextResponse.json({
+    return successResponse({
       success: true,
       agent,
       pruned: deleted,
@@ -243,7 +240,6 @@ export async function DELETE(request) {
       remaining: data.records.length - deleted,
     })
   } catch (error) {
-    console.error('[MEMORY] DELETE error:', error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError('MEMORY_DELETE', error)
   }
 }

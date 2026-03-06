@@ -266,6 +266,12 @@ export default function AgentChat({ agents, isOpen, onClose }) {
             </div>
           </div>
 
+          {/* Advisory mode banner */}
+          <div className="px-4 py-1.5 bg-amber-900/10 border-b border-amber-900/20 flex items-center gap-1.5 shrink-0">
+            <span className="text-[10px]">{'\u{1F4AC}'}</span>
+            <span className="text-[9px] text-amber-500/70">Advisory mode — chat doesn't change task assignments or agent behavior</span>
+          </div>
+
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             {channelMessages.length === 0 && !isLoading && (
@@ -282,7 +288,7 @@ export default function AgentChat({ agents, isOpen, onClose }) {
                 <div className="text-gray-600 text-[10px]">
                   {dmTarget
                     ? `${dmTarget} will respond using their AI personality and current pipeline knowledge.`
-                    : 'Messages here are powered by real AI. Ask about strategy, tasks, or give directions.'
+                    : 'Ask about strategy, content ideas, or get insights. Responses are advisory only.'
                   }
                 </div>
               </div>
@@ -395,8 +401,8 @@ export default function AgentChat({ agents, isOpen, onClose }) {
             <div className="text-[9px] text-gray-700 mt-1.5 flex items-center justify-between">
               <span>
                 {dmTarget
-                  ? `Chatting with ${dmTarget} \u{2022} AI-powered responses`
-                  : `#${selectedChannel || 'council'} \u{2022} AI-powered responses`
+                  ? `Chatting with ${dmTarget} \u{2022} Advisory only`
+                  : `#${selectedChannel || 'council'} \u{2022} Advisory only`
                 }
               </span>
               <span>{channelMessages.length} messages</span>

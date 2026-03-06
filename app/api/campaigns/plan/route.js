@@ -25,10 +25,12 @@ const CONTENT_MIX = [
   { type: 'Research', frequency: 1, platforms: ['Blog'] },
 ]
 
-// Planning thresholds — keep the pipeline FULL
-const MIN_PIPELINE_TASKS = 20 // Skip planning if 20+ non-Done tasks exist
-const TASKS_PER_PLAN = 12     // Generate 10-12 tasks per planning cycle
-const MAX_TASKS_PER_PLAN = 15 // Hard cap per plan
+// Planning thresholds — keep the pipeline fed but NOT overflowing
+// Tightened: users reported 100+ inbox items. Now scales batch size to inbox depth.
+const MIN_PIPELINE_TASKS = 15 // Skip planning if 15+ non-Done tasks exist
+const MAX_INBOX_TASKS = 20    // Hard cap — NEVER plan if inbox exceeds this
+const TASKS_PER_PLAN = 8      // Generate 6-8 tasks per planning cycle (was 12)
+const MAX_TASKS_PER_PLAN = 10 // Hard cap per plan (was 15)
 
 // ---- GOAL FREQUENCY ENGINE ----
 // Determines if a goal is "due" based on its frequency and last triggered date
@@ -98,11 +100,22 @@ export async function POST(request) {
       return NextResponse.json({ error: 'CMO agent not found' }, { status: 404 })
     }
 
-    // Check pipeline health — only skip if we have a FULL pipeline
+    // Check pipeline health — skip if inbox is already deep or pipeline is stocked
     const activeTasks = tasks.filter(t => t.status !== 'Done')
+    const inboxTasks = tasks.filter(t => t.status === 'Inbox')
     const inboxOrAssigned = tasks.filter(t => t.status === 'Inbox' || t.status === 'Assigned')
 
-    if (activeTasks.length >= MIN_PIPELINE_TASKS && inboxOrAssigned.length >= 8) {
+    // Hard stop: never plan if inbox is already overflowing
+    if (inboxTasks.length >= MAX_INBOX_TASKS) {
+      return NextResponse.json({
+        message: `Inbox overflow protection: ${inboxTasks.length} tasks in inbox (cap: ${MAX_INBOX_TASKS}). Skipping plan.`,
+        inboxCount: inboxTasks.length,
+        skipped: true,
+        reason: 'inbox_overflow',
+      })
+    }
+
+    if (activeTasks.length >= MIN_PIPELINE_TASKS && inboxOrAssigned.length >= 5) {
       return NextResponse.json({
         message: `Pipeline healthy: ${activeTasks.length} active tasks, ${inboxOrAssigned.length} in queue. Skipping auto-plan.`,
         activeTasks: activeTasks.length,

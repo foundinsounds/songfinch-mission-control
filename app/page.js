@@ -457,7 +457,7 @@ export default function Roundtable() {
               <ContentView />
             )}
             {currentView === 'inbox' && (
-              <SmartInbox tasks={tasks} agents={agents} onTaskClick={setSelectedTask} />
+              <SmartInbox tasks={tasks} agents={agents} onTaskClick={setSelectedTask} onRefresh={fetchData} />
             )}
             {currentView === 'calendar' && (
               <ContentCalendar tasks={tasks} agents={agents} onTaskClick={setSelectedTask} onRefresh={fetchData} />

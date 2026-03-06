@@ -2,7 +2,7 @@
 // Computes real-time analytics from Airtable data for the dashboard
 
 import { getTasks, getAgents, getActivityFeed } from '../../../lib/airtable'
-import { NextResponse } from 'next/server'
+import { successResponse, apiError } from '../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -240,7 +240,7 @@ export async function GET() {
       .sort((a, b) => a.date.localeCompare(b.date))
 
     // ── RESPONSE ──────────────────────────────────────
-    return NextResponse.json({
+    return successResponse({
       velocity: {
         perDay: parseFloat(velocityPerDay),
         perWeek: parseFloat(velocityPerWeek),
@@ -273,7 +273,6 @@ export async function GET() {
       },
     })
   } catch (err) {
-    console.error('[STATS] Error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return apiError('STATS', err)
   }
 }

@@ -3,7 +3,7 @@
 // Each goal has conditions, frequency, and assigned agent(s)
 
 import { NextResponse } from 'next/server'
-import { safeJsonParse } from '../../../lib/api-utils'
+import { safeJsonParse, successResponse, apiError } from '../../../lib/api-utils'
 
 const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY
 const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
@@ -116,10 +116,9 @@ export async function GET(request) {
       })
     }
 
-    return NextResponse.json({ goals })
+    return successResponse({ goals })
   } catch (error) {
-    console.error('[GOALS] GET error:', error.message)
-    return NextResponse.json({ goals: [], error: error.message })
+    return apiError('GOALS', error)
   }
 }
 
@@ -157,10 +156,9 @@ export async function PATCH(request) {
       body: JSON.stringify({ fields }),
     })
 
-    return NextResponse.json({ success: true, goal: data })
+    return successResponse({ success: true, goal: data })
   } catch (error) {
-    console.error('[GOALS] PATCH error:', error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError('GOALS', error)
   }
 }
 
@@ -192,9 +190,8 @@ export async function POST(request) {
       body: JSON.stringify({ records: [{ fields }] }),
     })
 
-    return NextResponse.json({ success: true, goal: data.records?.[0] })
+    return successResponse({ success: true, goal: data.records?.[0] })
   } catch (error) {
-    console.error('[GOALS] POST error:', error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError('GOALS', error)
   }
 }

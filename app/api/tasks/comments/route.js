@@ -2,8 +2,7 @@
 // Supports: adding notes, feedback, revision context per task
 // Stored in Airtable 'Task Comments' table
 
-import { NextResponse } from 'next/server'
-import { safeJsonParse } from '../../../../lib/api-utils'
+import { safeJsonParse, badRequest, successResponse, apiError } from '../../../../lib/api-utils'
 
 const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY
 const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
@@ -69,10 +68,9 @@ export async function GET(request) {
       createdAt: r.createdTime,
     }))
 
-    return NextResponse.json({ comments, total: comments.length })
+    return successResponse({ comments, total: comments.length })
   } catch (error) {
-    console.error('[COMMENTS] GET error:', error.message)
-    return NextResponse.json({ comments: [], error: error.message })
+    return apiError('COMMENTS_GET', error)
   }
 }
 
@@ -84,7 +82,7 @@ export async function POST(request) {
     const { taskId, taskName, author, type, content } = body
 
     if (!content) {
-      return NextResponse.json({ error: 'content is required' }, { status: 400 })
+      return badRequest('content is required')
     }
 
     // Auto-detect sentiment from content
@@ -112,13 +110,12 @@ export async function POST(request) {
       body: JSON.stringify({ records: [{ fields }] }),
     })
 
-    return NextResponse.json({
+    return successResponse({
       success: true,
       comment: data.records?.[0],
       sentiment,
     })
   } catch (error) {
-    console.error('[COMMENTS] POST error:', error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError('COMMENTS_POST', error)
   }
 }

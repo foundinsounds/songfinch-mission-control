@@ -1,6 +1,5 @@
 import { createTask, addActivity } from '../../../../lib/airtable'
-import { NextResponse } from 'next/server'
-import { safeJsonParse } from '../../../../lib/api-utils'
+import { safeJsonParse, badRequest, successResponse, apiError } from '../../../../lib/api-utils'
 
 export async function POST(request) {
   try {
@@ -9,7 +8,7 @@ export async function POST(request) {
     const { name, description, agent, contentType, priority, status, scheduledDate, campaign, platform } = body
 
     if (!name) {
-      return NextResponse.json({ error: 'name is required' }, { status: 400 })
+      return badRequest('name is required')
     }
 
     const fields = {
@@ -36,9 +35,8 @@ export async function POST(request) {
       'Type': 'Task Created',
     }).catch(err => console.warn('[TASKS] Activity log failed:', err.message))
 
-    return NextResponse.json({ success: true, record: result.records?.[0] })
+    return successResponse({ success: true, record: result.records?.[0] })
   } catch (error) {
-    console.error('Task create error:', error)
-    return NextResponse.json({ error: error.message || 'Failed to create task' }, { status: 500 })
+    return apiError('TASK_CREATE', error)
   }
 }

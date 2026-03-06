@@ -1,6 +1,5 @@
 import { updateTask, addActivity, addContent } from '../../../../lib/airtable'
-import { NextResponse } from 'next/server'
-import { safeJsonParse } from '../../../../lib/api-utils'
+import { safeJsonParse, badRequest, successResponse, apiError } from '../../../../lib/api-utils'
 
 export async function POST(request) {
   try {
@@ -9,10 +8,7 @@ export async function POST(request) {
     const { recordId, fields, taskContext } = body
 
     if (!recordId || !fields) {
-      return NextResponse.json(
-        { error: 'recordId and fields are required' },
-        { status: 400 }
-      )
+      return badRequest('recordId and fields are required')
     }
 
     // Map frontend field names to Airtable field names
@@ -73,13 +69,9 @@ export async function POST(request) {
       }
     }
 
-    return NextResponse.json({ success: true, record: result })
+    return successResponse({ success: true, record: result })
   } catch (error) {
-    console.error('Task update error:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to update task' },
-      { status: 500 }
-    )
+    return apiError('TASK_UPDATE', error)
   }
 }
 

@@ -403,7 +403,13 @@ async function triggerAggressivePlanning(tasks, activity) {
   const activeWIP = tasks.filter(t => t.status === 'Assigned' || t.status === 'In Progress').length
 
   // Skip planning if we still have a healthy Inbox buffer OR WIP is at capacity
-  if (!orchestrationSaysPlan && (inboxCount >= 10 || activeWIP >= MAX_GLOBAL_WIP)) {
+  // Tightened: inbox cap lowered from 10→6, hard cap at 20 regardless of orchestration
+  const INBOX_HARD_CAP = 20
+  if (inboxCount >= INBOX_HARD_CAP) {
+    console.log(`[RUNNER] Inbox overflow protection: ${inboxCount} inbox items (hard cap: ${INBOX_HARD_CAP}). Blocking ALL planning.`)
+    return null
+  }
+  if (!orchestrationSaysPlan && (inboxCount >= 6 || activeWIP >= MAX_GLOBAL_WIP)) {
     console.log(`[RUNNER] Pipeline stocked: ${inboxCount} inbox, ${activeWIP} active WIP (cap ${MAX_GLOBAL_WIP}), ${reviewCount} review. Skipping plan.`)
     return null
   }
