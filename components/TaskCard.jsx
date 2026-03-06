@@ -2,9 +2,21 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { AGENTS } from '../lib/agents'
+import { STATUS_STYLES } from '../lib/constants'
 import { TaskTimeInline } from './TaskTimeTracker'
 import { ContentPreviewInline } from './ContentPreview'
 import { BlockedBadge, UnblocksBadge, DependencyChainBadge } from './TaskDependencies'
+
+// Dot color classes derived from centralized STATUS_STYLES, with fallbacks for Error/Failed
+const STATUS_DOT = Object.fromEntries(
+  Object.entries(STATUS_STYLES).map(([k, v]) => [k, v.dot])
+)
+STATUS_DOT['Error'] = 'bg-red-500'
+STATUS_DOT['Failed'] = 'bg-red-500'
+
+function getStatusDotClass(status) {
+  return STATUS_DOT[status] || 'bg-gray-500'
+}
 
 function timeAgo(dateStr) {
   const date = new Date(dateStr)
@@ -250,13 +262,7 @@ function HoverPreview({ task, agent, cardRef }) {
         <div className="flex-1 min-w-0">
           <div className="text-[11px] font-semibold text-gray-200 truncate">{task.name}</div>
           <div className="text-[9px] text-gray-500 flex items-center gap-1.5">
-            <span className={`inline-block w-1.5 h-1.5 rounded-full ${
-              task.status === 'Done' ? 'bg-green-500' :
-              task.status === 'Review' ? 'bg-blue-400' :
-              task.status === 'In Progress' ? 'bg-yellow-400 status-badge-pulse' :
-              task.status === 'Error' || task.status === 'Failed' ? 'bg-red-500' :
-              'bg-gray-500'
-            }`} />
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${getStatusDotClass(task.status)}${task.status === 'In Progress' ? ' status-badge-pulse' : ''}`} />
             {task.status} · {task.priority || 'Normal'} priority
           </div>
         </div>
@@ -447,19 +453,17 @@ export default function TaskCard({ task, onClick, onContextMenu, onQuickApprove,
         onContextMenu={onContextMenu}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        tabIndex={0}
+        role="button"
+        aria-label={`${task.name}${task.priority ? `, ${task.priority}` : ''}, ${task.status}`}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.() } }}
         className={`relative group flex items-center gap-1.5 px-2 py-1 rounded-md border border-dark-500/70 border-l-[4px] ${PRIORITY_STYLES[task.priority] || 'border-l-gray-600'} compact-card-hover cursor-pointer ${
           isSelected ? 'bg-accent-orange/10 border-accent-orange/30' : `${PRIORITY_BG_TINT[task.priority] || 'bg-dark-700/80'} hover:bg-dark-600`
         } ${isDone ? 'opacity-70' : ''} ${isFocused ? 'ring-2 ring-accent-blue/60 bg-accent-blue/5' : ''} ${isHighPriority ? 'priority-pulse-high' : ''} animate-card-enter-compact`}
         style={{ animationDelay: `${entranceDelay}ms`, animationFillMode: 'backwards' }}
       >
         {/* Status dot */}
-        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-          isDone ? 'bg-green-500' :
-          isReview ? 'bg-blue-400' :
-          isInProgress ? 'bg-yellow-400' :
-          isFailed ? 'bg-red-500' :
-          'bg-gray-500'
-        }`} />
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getStatusDotClass(task.status)}${isInProgress ? ' status-badge-pulse' : ''}`} />
 
         {/* Task name */}
         <span className={`text-[11px] font-medium truncate flex-1 ${isDone ? 'text-gray-500 line-through' : 'text-gray-200'}`}>
@@ -503,6 +507,10 @@ export default function TaskCard({ task, onClick, onContextMenu, onQuickApprove,
         onContextMenu={onContextMenu}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        tabIndex={0}
+        role="button"
+        aria-label={`${task.name}${task.priority ? `, ${task.priority}` : ''}, ${task.status}${agent ? `, ${agent.name}` : ''}`}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.() } }}
         className={`relative group flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-dark-500 border-l-[4px] ${PRIORITY_STYLES[task.priority] || 'border-l-gray-600'} compact-card-hover cursor-pointer ${
           isSelected ? 'bg-accent-orange/10 border-accent-orange/30' : `${PRIORITY_BG_TINT[task.priority] || 'bg-dark-700'} hover:bg-dark-600`
         } ${isDone ? 'opacity-75' : ''} ${isFocused ? 'ring-2 ring-accent-blue/60 bg-accent-blue/5' : ''} ${isHighPriority ? 'priority-pulse-high' : ''} animate-card-enter-compact`}
@@ -592,8 +600,12 @@ export default function TaskCard({ task, onClick, onContextMenu, onQuickApprove,
       onContextMenu={onContextMenu}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      tabIndex={0}
+      role="button"
+      aria-label={`Task: ${task.name}${task.priority ? `, ${task.priority} priority` : ''}${task.status ? `, ${task.status}` : ''}${agent ? `, assigned to ${agent.name}` : ', unassigned'}`}
       className={`group task-card ${statusHoverClass} ${PRIORITY_BG_TINT[task.priority] || 'bg-dark-700'} rounded-lg border border-dark-500 border-l-[4px] ${PRIORITY_STYLES[task.priority] || 'border-l-gray-600'} p-3 relative ${isDone ? 'opacity-85' : ''} ${isSelected ? 'ring-1 ring-accent-orange/40 bg-accent-orange/5' : ''} ${isFocused ? 'ring-2 ring-accent-blue/60 bg-accent-blue/5 shadow-lg shadow-accent-blue/10' : ''} ${isHighPriority ? 'priority-pulse-high' : ''} animate-card-enter`}
       style={{ animationDelay: `${entranceDelay}ms`, animationFillMode: 'backwards' }}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.() } }}
     >
       {/* Hover Preview Popover */}
       {showPreview && <HoverPreview task={task} agent={agent} cardRef={cardRef} />}
@@ -710,7 +722,7 @@ export default function TaskCard({ task, onClick, onContextMenu, onQuickApprove,
                 />
               )}
             </div>
-            <span className="text-[11px] text-gray-400 font-medium">{agent.emoji} {agent.name}</span>
+            <span className="text-[11px] text-gray-400 font-medium">{agent.name}</span>
           </div>
         ) : (
           <span className="text-[11px] text-gray-600 italic">Unassigned</span>
