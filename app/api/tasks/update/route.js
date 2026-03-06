@@ -15,7 +15,13 @@ export async function POST(request) {
 
     // Map frontend field names to Airtable field names
     const airtableFields = {}
-    if (fields.Status) airtableFields['Status'] = fields.Status
+    if (fields.Status) {
+      airtableFields['Status'] = fields.Status
+      // Stamp completion timestamp when marking as Done
+      if (fields.Status === 'Done') {
+        airtableFields['Completed At'] = new Date().toISOString()
+      }
+    }
     if (fields.Agent) airtableFields['Agent'] = fields.Agent
     if (fields.Priority) airtableFields['Priority'] = fields.Priority
     if (fields.Description) airtableFields['Description'] = fields.Description

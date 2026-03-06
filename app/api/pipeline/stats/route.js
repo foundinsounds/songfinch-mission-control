@@ -41,9 +41,16 @@ export async function GET() {
     })
 
     // Pipeline velocity — tasks completed in last 24h, 7d
+    // Uses completedAt timestamp if available, falls back to createdAt for legacy tasks
     const done = tasks.filter(t => t.status === 'Done')
-    const doneLast24h = done.filter(t => t.completedAt && (now - new Date(t.completedAt).getTime()) < 86400000).length
-    const doneLast7d = done.filter(t => t.completedAt && (now - new Date(t.completedAt).getTime()) < 7 * 86400000).length
+    const doneLast24h = done.filter(t => {
+      const ts = t.completedAt || t.createdAt
+      return ts && (now - new Date(ts).getTime()) < 86400000
+    }).length
+    const doneLast7d = done.filter(t => {
+      const ts = t.completedAt || t.createdAt
+      return ts && (now - new Date(ts).getTime()) < 7 * 86400000
+    }).length
 
     // Overdue tasks (scheduled date in the past, not Done)
     const overdue = tasks.filter(t =>

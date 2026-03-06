@@ -651,7 +651,7 @@ export async function GET(request) {
 
     // 8. Mark all tasks "In Progress" first (batch status update)
     // Cap per cycle to avoid Vercel function timeout (300s max)
-    const MAX_TASKS_PER_CYCLE = 8
+    const MAX_TASKS_PER_CYCLE = 12
     const validTasks = []
     for (const task of assignedTasks) {
       if (validTasks.length >= MAX_TASKS_PER_CYCLE) {
@@ -689,7 +689,7 @@ export async function GET(request) {
     // 9. BATCHED PROCESSING: Execute tasks in small batches to avoid rate limits
     // Batches of 4 with 10s delays — prevents 429s on Anthropic's 30K tokens/min limit
     const TASK_BATCH_SIZE = 4
-    const TASK_BATCH_DELAY_MS = 10000
+    const TASK_BATCH_DELAY_MS = 5000
     const taskResults = []
 
     for (let bi = 0; bi < validTasks.length; bi += TASK_BATCH_SIZE) {

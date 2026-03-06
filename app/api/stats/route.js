@@ -31,7 +31,18 @@ export async function GET() {
     // Tasks created in last 7 days
     const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000)
     const createdThisWeek = tasks.filter(t => t.createdAt && new Date(t.createdAt) >= weekAgo).length
-    const completedThisWeek = doneTasks.filter(t => t.createdAt && new Date(t.createdAt) >= weekAgo).length
+    // Use completedAt if available, fall back to createdAt for legacy tasks
+    const completedThisWeek = doneTasks.filter(t => {
+      const ts = t.completedAt || t.createdAt
+      return ts && new Date(ts) >= weekAgo
+    }).length
+
+    // Per-24h velocity (tasks completed in last 24 hours)
+    const dayAgo = new Date(now - 24 * 60 * 60 * 1000)
+    const completedLast24h = doneTasks.filter(t => {
+      const ts = t.completedAt || t.createdAt
+      return ts && new Date(ts) >= dayAgo
+    }).length
 
     // Pipeline throughput — tasks moving from Inbox to Done
     const pipelineStages = {
@@ -205,6 +216,7 @@ export async function GET() {
       velocity: {
         perDay: parseFloat(velocityPerDay),
         perWeek: parseFloat(velocityPerWeek),
+        per24h: completedLast24h,
         createdThisWeek,
         completedThisWeek,
         daysActive,

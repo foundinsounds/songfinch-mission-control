@@ -139,12 +139,15 @@ export async function POST(request) {
       }
     }
 
-    // Log activity
+    // Log activity with error details for debugging
+    const errorSummary = results.errors.length > 0
+      ? ` Errors: ${results.errors.map(e => `"${e.taskName}": ${e.error}`).join('; ').substring(0, 500)}`
+      : ''
     await addActivity({
       'Agent': 'System',
       'Action': 'exported to Drive',
       'Task': 'Drive Export',
-      'Details': `Exported ${results.exported.length}/${tasksToExport.length} tasks to Google Drive. ${results.errors.length} errors.`,
+      'Details': `Exported ${results.exported.length}/${tasksToExport.length} tasks to Google Drive.${errorSummary}`,
       'Type': 'Content Generated',
     }).catch(() => {})
 
