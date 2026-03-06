@@ -843,6 +843,8 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
           return (
             <div
               key={col.key}
+              role="region"
+              aria-label={`${col.label} column — ${columnTasks.length} task${columnTasks.length !== 1 ? 's' : ''}`}
               className={`kanban-column border-r border-dark-500 last:border-r-0 flex flex-col transition-all duration-300 ${
                 collapsedColumns[col.key] ? 'min-w-[60px] max-w-[60px]' : 'flex-1 min-w-[240px]'
               } ${dragOverColumn === col.key && !draggedColumnKey ? 'kanban-dropzone-active ring-1 ring-inset ring-accent-orange/20' : ''

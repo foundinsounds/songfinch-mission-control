@@ -213,6 +213,12 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
   // Keyboard navigation: ↑/↓ or j/k to cycle tasks without closing modal
   const handleKeyNav = useCallback((e) => {
     // Don't intercept when typing in inputs/textareas
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      onClose()
+      return
+    }
+    // Don't intercept when typing in inputs/textareas
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return
     if (e.key === 'ArrowDown' || e.key === 'j') {
       e.preventDefault()
@@ -221,7 +227,7 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
       e.preventDefault()
       onPrevTask?.()
     }
-  }, [onNextTask, onPrevTask])
+  }, [onClose, onNextTask, onPrevTask])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyNav)
@@ -355,11 +361,12 @@ export default function TaskModal({ task, agent, onClose, onApprove, onUpdateSta
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-label={`Task details: ${task.name}`}>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={onClose}
+        aria-hidden="true"
       />
 
       {/* Modal */}
