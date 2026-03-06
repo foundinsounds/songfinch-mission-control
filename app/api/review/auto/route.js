@@ -382,6 +382,8 @@ ${QUALITY_RUBRIC}
 3. Apply the verdict rules
 4. Provide specific, actionable feedback
 
+IMPORTANT CALIBRATION: A score of 3 means GOOD — the content meets professional standards and is publishable. Reserve 1-2 for content that truly fails at a dimension. Most competent, well-written content should score 3-4 on most dimensions. If you're giving mostly 2s, you're being too harsh.
+
 ## Output Format (STRICT — follow exactly)
 SCORES:
 Narrative Ladder: X/5
@@ -403,7 +405,7 @@ function parseVerdict(output) {
   const avgMatch = output.match(/AVERAGE:\s*([\d.]+)/i)
   const score = avgMatch ? parseFloat(avgMatch[1]) : 3.0
 
-  // Extract verdict
+  // Extract verdict text (for reference, but score takes priority)
   const verdictMatch = output.match(/VERDICT:\s*(APPROVE_WITH_NOTES|APPROVE|REVISE|REJECT)/i)
   const verdictText = verdictMatch ? verdictMatch[1].toUpperCase() : null
 
@@ -415,19 +417,27 @@ function parseVerdict(output) {
   const learningMatch = output.match(/LEARNING:\s*([\s\S]*?)$/i)
   const learning = learningMatch ? learningMatch[1].trim().substring(0, 1000) : ''
 
-  // Determine approval: explicit verdict takes priority, then score-based
-  let approved
-  if (verdictText) {
-    approved = verdictText === 'APPROVE' || verdictText === 'APPROVE_WITH_NOTES'
+  // Score-based approval (score always takes priority over LLM's verdict text)
+  // Thresholds: 3.5+ = APPROVE, 2.5-3.4 = APPROVE_WITH_NOTES, 1.5-2.4 = REVISE, <1.5 = REJECT
+  let approved, verdict
+  if (score >= 3.5) {
+    approved = true
+    verdict = 'APPROVE'
+  } else if (score >= 2.5) {
+    approved = true
+    verdict = 'APPROVE_WITH_NOTES'
+  } else if (score >= 1.5) {
+    approved = false
+    verdict = 'REVISE'
   } else {
-    // Fallback to score-based
-    approved = score >= 3.0
+    approved = false
+    verdict = 'REJECT'
   }
 
   return {
     approved,
     score,
-    verdict: verdictText || (approved ? 'APPROVE' : 'REVISE'),
+    verdict,
     feedback: approved ? '' : feedback,
     summary: feedback.substring(0, 200),
     learning,

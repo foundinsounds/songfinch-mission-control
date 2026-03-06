@@ -195,6 +195,7 @@ const COLUMNS = [
   { key: 'In Progress', label: 'IN PROGRESS', dotColor: 'bg-accent-blue', icon: '⚡', barColor: '#3b82f6', wipLimit: 4 },
   { key: 'Review', label: 'REVIEW', dotColor: 'bg-accent-orange', icon: '🔍', barColor: '#f97316', wipLimit: 3 },
   { key: 'Done', label: 'DONE', dotColor: 'bg-accent-green', icon: '✅', barColor: '#22c55e', wipLimit: null },
+  { key: 'Revisit', label: 'REVISIT', dotColor: 'bg-violet-500', icon: '🔄', barColor: '#8b5cf6', wipLimit: null, isParking: true },
 ]
 
 const PRIORITY_SORT = { high: 0, medium: 1, low: 2 }
@@ -245,6 +246,15 @@ const EMPTY_STATES = {
     ),
     title: 'No completed tasks',
     hint: 'Approved work is archived here',
+  },
+  Revisit: {
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" className="text-gray-600">
+        <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+      </svg>
+    ),
+    title: 'Parking lot empty',
+    hint: 'Parked tasks — agents ignore these',
   },
 }
 

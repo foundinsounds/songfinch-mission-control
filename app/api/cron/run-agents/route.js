@@ -1122,6 +1122,7 @@ function buildStats(tasks) {
     inProgress: tasks.filter(t => t.status === 'In Progress').length,
     review: tasks.filter(t => t.status === 'Review').length,
     done: tasks.filter(t => t.status === 'Done').length,
+    revisit: tasks.filter(t => t.status === 'Revisit').length,
   }
 }
 

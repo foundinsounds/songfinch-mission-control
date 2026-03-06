@@ -70,7 +70,7 @@ export async function POST(request) {
           return NextResponse.json({ error: 'payload.taskName and payload.status required' }, { status: 400 })
         }
 
-        const validStatuses = ['Inbox', 'Assigned', 'Review', 'Done']
+        const validStatuses = ['Inbox', 'Assigned', 'Review', 'Done', 'Revisit']
         if (!validStatuses.includes(status)) {
           return NextResponse.json({ error: `Invalid status. Must be: ${validStatuses.join(', ')}` }, { status: 400 })
         }
@@ -147,7 +147,7 @@ export async function GET() {
       },
       update_status: {
         description: 'Update a task status',
-        payload: { taskName: 'required', status: 'Inbox|Assigned|Review|Done' },
+        payload: { taskName: 'required', status: 'Inbox|Assigned|Review|Done|Revisit' },
       },
       boost_priority: {
         description: 'Escalate task priority',

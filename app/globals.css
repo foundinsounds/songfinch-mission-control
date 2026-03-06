@@ -504,33 +504,9 @@ body {
   border-color: rgba(249, 115, 22, 0.4);
 }
 
-/* Status-aware hover glow — colored shadow matches card status */
-.task-card.status-review:hover {
-  box-shadow: 0 8px 24px rgba(249, 115, 22, 0.08), 0 0 0 1px rgba(249, 115, 22, 0.12);
-  border-color: rgba(249, 115, 22, 0.25);
-}
-.task-card.status-in-progress:hover {
-  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.08), 0 0 0 1px rgba(59, 130, 246, 0.12);
-  border-color: rgba(59, 130, 246, 0.2);
-}
-.task-card.status-error:hover {
-  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.08), 0 0 0 1px rgba(239, 68, 68, 0.12);
-  border-color: rgba(239, 68, 68, 0.25);
-}
-.task-card.status-done:hover {
-  box-shadow: 0 8px 24px rgba(34, 197, 94, 0.06), 0 0 0 1px rgba(34, 197, 94, 0.1);
-  border-color: rgba(34, 197, 94, 0.15);
-}
-
-/* Agent activity ring — smooth pulse for in-progress tasks */
-@keyframes agent-ring-pulse {
-  0%, 100% { transform: scale(1); opacity: 0.5; }
-  50% { transform: scale(1.15); opacity: 0.25; }
-}
-.agent-ring-active {
-  animation: agent-ring-pulse 2s ease-in-out infinite;
-  border: 1.5px solid currentColor;
-  border-radius: 9999px;
+/* Task card hover — uniform subtle elevation instead of per-status colored glows */
+.task-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* Tag hover micro-interaction */
@@ -664,29 +640,7 @@ body {
   animation: checkbox-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* Priority pulse for high-priority cards — slow, subtle border glow */
-@keyframes priority-pulse {
-  0%, 100% {
-    border-left-color: rgba(239, 68, 68, 0.7);
-    box-shadow: inset 4px 0 8px -4px rgba(239, 68, 68, 0);
-  }
-  50% {
-    border-left-color: rgba(239, 68, 68, 1);
-    box-shadow: inset 4px 0 8px -4px rgba(239, 68, 68, 0.15);
-  }
-}
-.priority-pulse-high {
-  animation: priority-pulse 4s ease-in-out infinite;
-}
-
-/* Priority dot pulse for high-priority indicators */
-@keyframes priority-dot-pulse {
-  0%, 100% { opacity: 0.8; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.15); }
-}
-.priority-pulse-high [title="High priority"] {
-  animation: priority-dot-pulse 4s ease-in-out infinite;
-}
+/* Priority pulse and dot pulse removed — static border color is sufficient */
 
 /* Link button hover glow */
 .link-btn {
@@ -1595,22 +1549,9 @@ body.focus-mode-active .kanban-board {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06) !important;
 }
 
-/* Status-aware card hovers with softer glows in light mode */
-[data-theme="light"] .task-card.status-review:hover {
-  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.1), 0 0 0 1px rgba(249, 115, 22, 0.15) !important;
-  border-color: rgba(249, 115, 22, 0.3) !important;
-}
-[data-theme="light"] .task-card.status-in-progress:hover {
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.1), 0 0 0 1px rgba(59, 130, 246, 0.15) !important;
-  border-color: rgba(59, 130, 246, 0.25) !important;
-}
-[data-theme="light"] .task-card.status-error:hover {
-  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.1), 0 0 0 1px rgba(239, 68, 68, 0.15) !important;
-  border-color: rgba(239, 68, 68, 0.3) !important;
-}
-[data-theme="light"] .task-card.status-done:hover {
-  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.08), 0 0 0 1px rgba(34, 197, 94, 0.12) !important;
-  border-color: rgba(34, 197, 94, 0.2) !important;
+/* Light mode task card hover — matches dark mode uniform elevation */
+[data-theme="light"] .task-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
 }
 
 /* Dragging card in light mode */
