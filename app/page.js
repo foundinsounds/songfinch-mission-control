@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { AGENTS as FALLBACK_AGENTS } from '../lib/agents'
 import { MOCK_TASKS, MOCK_ACTIVITY } from '../lib/mockData'
-import { GOOGLE_DRIVE_FOLDER, AIRTABLE_BASE_URL, VERSION, COUNCIL_NAME } from '../lib/constants'
+// Constants used by child components (StatsHeader imports its own)
 import AgentSidebar from '../components/AgentSidebar'
 import AgentConfigPanel from '../components/AgentConfigPanel'
 import KanbanBoard from '../components/KanbanBoard'
@@ -566,79 +566,15 @@ export default function Roundtable() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="footer-bar border-t border-dark-500 px-3 sm:px-6 py-2 pb-14 flex items-center justify-between shrink-0">
-        <div className="text-[10px] sm:text-[11px] text-gray-600 truncate flex items-center gap-2">
-          <span className="hidden sm:inline">Roundtable {VERSION} — {COUNCIL_NAME}</span>
-          <span className="sm:hidden">RT {VERSION}</span>
-          {/* Activity sparkline moved to fixed bottom strip */}
-        </div>
-        <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-[11px] text-gray-600">
-          {/* Sync indicator */}
-          <div className="flex items-center gap-1.5" title={lastSync ? `Last synced: ${lastSync.toLocaleTimeString()}` : 'Not synced yet'}>
-            {isSyncing ? (
-              <svg className="w-3 h-3 animate-spin text-accent-orange" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" />
-              </svg>
-            ) : (
-              <div className={`w-1.5 h-1.5 rounded-full transition-colors duration-500 ${lastSync && (Date.now() - lastSync.getTime()) < 30000 ? 'bg-accent-green pulse-dot' : 'bg-gray-600'}`} />
-            )}
-            <span className="hidden lg:inline">
-              {isSyncing ? (
-                <span className="text-accent-orange">Syncing…</span>
-              ) : lastSync ? (
-                `Synced ${Math.floor((Date.now() - lastSync.getTime()) / 1000)}s ago`
-              ) : (
-                'Not synced'
-              )}
-            </span>
-            <button
-              onClick={() => !isSyncing && fetchData()}
-              disabled={isSyncing}
-              className="ml-0.5 p-0.5 rounded hover:bg-dark-600 transition-colors disabled:opacity-30"
-              title="Refresh now (⌘R)"
-              aria-label="Refresh data"
-            >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isSyncing ? 'animate-spin' : ''}>
-                <polyline points="23 4 23 10 17 10" />
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-              </svg>
-            </button>
-          </div>
-          <a
-            href={GOOGLE_DRIVE_FOLDER}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hidden md:flex hover:text-gray-400 transition-colors items-center gap-1"
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M22 12h-6l-2 3H9l-2-3H1" />
-              <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
-            </svg>
-            Drive
-          </a>
-          <a
-            href={AIRTABLE_BASE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hidden md:flex hover:text-gray-400 transition-colors items-center gap-1"
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="3" width="7" height="7" />
-              <rect x="14" y="3" width="7" height="7" />
-              <rect x="14" y="14" width="7" height="7" />
-              <rect x="3" y="14" width="7" height="7" />
-            </svg>
-            Airtable
-          </a>
-          <span className="hidden sm:inline opacity-40">|</span>
-          <span className="hidden sm:inline">{agents.length} agents</span>
-          <ExportButton tasks={tasks} activity={activity} />
-        </div>
-      </footer>
+      {/* Bottom spacer — clearance for fixed FooterSparkline overlay */}
+      <div className="h-12 shrink-0" />
 
-      {/* Activity Strip — fixed bottom bar with sparkline + stats */}
-      <FooterSparkline activity={activity} tasks={tasks} />
+      {/* Activity Strip — fixed bottom bar with sparkline + stats + export */}
+      <FooterSparkline
+        activity={activity}
+        tasks={tasks}
+        rightSlot={<ExportButton tasks={tasks} activity={activity} />}
+      />
 
       {/* Bulk Actions Toolbar — floats at bottom when tasks are selected */}
       <BulkActions

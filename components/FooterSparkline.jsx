@@ -104,7 +104,7 @@ function ActivitySparkline({ data = [], width = 120, height = 24 }) {
   )
 }
 
-export default function FooterSparkline({ activity = [], tasks = [] }) {
+export default function FooterSparkline({ activity = [], tasks = [], rightSlot }) {
   const [expanded, setExpanded] = useState(true)
   const [mounted, setMounted] = useState(false)
   const stripRef = useRef(null)
@@ -244,8 +244,14 @@ export default function FooterSparkline({ activity = [], tasks = [] }) {
           </span>
         </div>
 
-        {/* Right: Collapse indicator + mini activity count on mobile */}
+        {/* Right: Slot + collapse indicator + mini activity count on mobile */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Injected slot (e.g. ExportButton) — stop propagation so clicks don't toggle strip */}
+          {rightSlot && (
+            <div onClick={e => e.stopPropagation()} className="flex items-center">
+              {rightSlot}
+            </div>
+          )}
           {/* Mobile: show event count when sparkline is hidden */}
           <span className="md:hidden text-[9px] text-gray-600 font-mono tabular-nums">
             {activity.length} events

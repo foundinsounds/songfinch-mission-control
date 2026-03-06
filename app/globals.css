@@ -118,10 +118,6 @@ body {
   border-color: var(--border) !important;
 }
 
-[data-theme="light"] .footer-bar {
-  background: var(--bg-secondary);
-  border-color: var(--border) !important;
-}
 
 [data-theme="light"] .header-btn {
   color: var(--text-secondary);
@@ -656,10 +652,6 @@ body {
   background: var(--header-bg);
 }
 
-/* Footer bar */
-.footer-bar {
-  background: var(--bg-secondary);
-}
 
 /* Header buttons */
 .header-btn {
