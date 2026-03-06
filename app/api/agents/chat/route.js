@@ -1,6 +1,5 @@
 // Agent Chat API — Real AI-powered conversations with individual agents and the Council
 // POST: Send a message, get an AI response from the target agent
-// GET:  Fetch recent activity for context (optional)
 
 import { getAgents, addActivity, getTasks } from '../../../../lib/airtable'
 import { callAI } from '../../../../lib/ai'
@@ -126,11 +125,25 @@ export async function POST(request) {
   } catch (err) {
     console.error('[CHAT] Error:', err)
 
-    // Return a graceful error that the UI can display
+    // Differentiate error types for better UX feedback
+    const isRateLimit = err.message?.includes('429') || err.message?.toLowerCase().includes('rate limit')
+    const isTimeout = err.message?.includes('timeout') || err.message?.includes('ETIMEDOUT')
+    const isAuth = err.message?.includes('401') || err.message?.includes('403') || err.message?.includes('auth')
+
+    const status = isRateLimit ? 429 : isAuth ? 403 : isTimeout ? 504 : 500
+    const fallbackMessage = isRateLimit
+      ? "I'm being rate limited right now. Please wait a moment and try again."
+      : isTimeout
+        ? "The request timed out. The AI service might be slow — try again shortly."
+        : isAuth
+          ? "Authentication error. Please check that API keys are configured correctly."
+          : "I'm having trouble connecting right now. Please try again in a moment."
+
     return NextResponse.json({
       error: err.message,
-      fallbackMessage: "I'm having trouble connecting right now. Please try again in a moment.",
-    }, { status: 500 })
+      fallbackMessage,
+      errorType: isRateLimit ? 'rate_limit' : isTimeout ? 'timeout' : isAuth ? 'auth' : 'server_error',
+    }, { status })
   }
 }
 
