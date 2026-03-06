@@ -428,8 +428,8 @@ export default function Roundtable() {
         }}
       />
 
-      {/* Main Content */}
-      <main id="main-content" className="flex flex-1 overflow-hidden">
+      {/* Main Content — ambient glow adds subtle depth gradients */}
+      <main id="main-content" className="ambient-glow flex flex-1 overflow-hidden">
         {/* Mobile Sidebar Overlay */}
         {mobileSidebar && (
           <div

@@ -243,29 +243,29 @@ export default function StatsHeader({ data = {}, sync = {}, actions = {}, panels
         </div>
       </div>
 
-      {/* Center: Compact Stats with Sparklines */}
-      <div className="hidden sm:flex items-center gap-3 lg:gap-5">
-        <div className="flex items-center gap-1.5 animate-stat-count">
-          <div className="w-1.5 h-1.5 rounded-full bg-accent-green pulse-dot" aria-hidden="true" />
+      {/* Center: Compact Stats with Sparklines — pill style */}
+      <div className="hidden sm:flex items-center gap-2 lg:gap-3">
+        <div className="stat-pill stat-pill-green animate-stat-count">
+          <div className="w-1.5 h-1.5 rounded-full bg-accent-green online-shimmer" aria-hidden="true" />
           <span className="text-sm font-bold">{stats.agentsActive}</span>
           <span className="text-[9px] text-gray-500 uppercase">online</span>
         </div>
-        <div className="flex items-center gap-1.5 animate-stat-count">
+        <div className="stat-pill animate-stat-count">
           <span className="text-sm font-bold">{stats.tasksInQueue}</span>
           <span className="text-[9px] text-gray-500 uppercase">queue</span>
           {sparklines?.queue && <MiniSparkline data={sparklines.queue} color="#94a3b8" width={40} height={14} />}
         </div>
-        <div className="flex items-center gap-1.5 animate-stat-count">
+        <div className="stat-pill stat-pill-orange animate-stat-count">
           <span className="text-sm font-bold text-accent-orange">{stats.inReview}</span>
           <span className="text-[9px] text-gray-500 uppercase">review</span>
           {sparklines?.review && <MiniSparkline data={sparklines.review} color="#f97316" width={40} height={14} filled />}
         </div>
-        <div className="flex items-center gap-1.5 animate-stat-count">
+        <div className="stat-pill stat-pill-green animate-stat-count">
           <span className="text-sm font-bold text-accent-green">{stats.completed}</span>
           <span className="text-[9px] text-gray-500 uppercase">done</span>
           {sparklines?.done && <MiniSparkline data={sparklines.done} color="#22c55e" width={40} height={14} filled />}
         </div>
-        <div className="hidden xl:flex items-center gap-1.5 border-l border-dark-500 pl-5 animate-stat-count">
+        <div className="hidden xl:flex stat-pill stat-pill-purple border-l border-dark-500 pl-3 ml-2 animate-stat-count">
           <span className="text-sm font-bold text-accent-purple">{stats.contentPieces || 0}</span>
           <span className="text-[9px] text-gray-500 uppercase">content</span>
           {sparklines?.content && <MiniSparkline data={sparklines.content} color="#a855f7" width={40} height={14} />}

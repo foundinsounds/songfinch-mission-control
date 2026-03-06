@@ -876,15 +876,16 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
                 }
               }}
             >
-              {/* Column Header — sticky with scroll shadow, draggable for reorder */}
+              {/* Column Header — sticky with scroll shadow, draggable for reorder, gradient accent bar */}
               <div
                 draggable
                 onDragStart={(e) => handleColumnDragStart(e, col.key)}
                 onDragEnd={handleColumnDragEnd}
                 onDoubleClick={() => toggleCollapse(col.key)}
-                className={`${collapsedColumns[col.key] ? 'px-2' : 'px-4'} py-3 border-b flex ${collapsedColumns[col.key] ? 'flex-col items-center gap-2' : 'items-center justify-between'} shrink-0 relative z-10 backdrop-blur-sm transition-shadow duration-200 cursor-grab active:cursor-grabbing select-none ${
+                className={`column-header-gradient ${collapsedColumns[col.key] ? 'px-2' : 'px-4'} py-3 border-b flex ${collapsedColumns[col.key] ? 'flex-col items-center gap-2' : 'items-center justify-between'} shrink-0 relative z-10 backdrop-blur-sm transition-shadow duration-200 cursor-grab active:cursor-grabbing select-none ${
                 isOverWip ? 'bg-red-500/10 border-red-500/30' : isDoneColumn ? 'bg-accent-green/5 border-dark-500' : 'bg-dark-800/50 border-dark-500'
-              } ${scrolledColumns[col.key] ? 'shadow-[0_4px_12px_rgba(0,0,0,0.3)]' : ''}`}>
+              } ${scrolledColumns[col.key] ? 'shadow-[0_4px_12px_rgba(0,0,0,0.3)]' : ''}`}
+                style={{ '--col-bar': col.barColor }}>
                 <div className={`flex items-center gap-2 ${collapsedColumns[col.key] ? 'flex-col' : ''}`}>
                   <div className={`w-2 h-2 rounded-full ${isOverWip ? 'bg-red-500 pulse-dot' : col.dotColor} ${col.key === 'In Progress' && !isOverWip ? 'pulse-dot' : ''}`}></div>
                   {!collapsedColumns[col.key] && (

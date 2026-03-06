@@ -66,6 +66,111 @@ export default function AgentChat({ agents, isOpen, onClose, onOpen }) {
       .map(m => ({ sender: m.sender, text: m.text }))
   }, [messages, dmTarget, selectedChannel])
 
+  // Retry a failed message (removes the error message and re-sends)
+  const retryLastMessage = useCallback(() => {
+    const channelId = dmTarget ? `dm-${dmTarget}` : selectedChannel
+    const channelMsgs = messages.filter(m => m.channel === channelId)
+    // Find the last user message
+    const lastUserMsg = [...channelMsgs].reverse().find(m => m.sender === 'You')
+    if (!lastUserMsg) return
+
+    // Remove error messages after the last user message
+    setMessages(prev => {
+      const cleaned = prev.filter(m => !(m.channel === channelId && m.isError && m.id > lastUserMsg.id))
+      storeMessages(cleaned)
+      return cleaned
+    })
+
+    // Re-send
+    setInput(lastUserMsg.text)
+    setTimeout(() => {
+      setInput('')
+      sendMessageDirect(lastUserMsg.text)
+    }, 50)
+  }, [messages, dmTarget, selectedChannel])
+
+  // Core send logic — used by both sendMessage and retryLastMessage
+  const sendMessageDirect = useCallback(async (messageText, attempt = 0) => {
+    const channelId = dmTarget ? `dm-${dmTarget}` : selectedChannel
+    setError(null)
+    setIsLoading(true)
+
+    const MAX_RETRIES = 1 // Auto-retry once before showing error
+
+    try {
+      const history = getConversationHistory()
+
+      const res = await fetch('/api/agents/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: messageText,
+          channel: dmTarget ? null : selectedChannel,
+          agentName: dmTarget || null,
+          conversationHistory: history,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        // Auto-retry on transient errors (500, 502, 503, 504, 429)
+        const isTransient = res.status >= 500 || res.status === 429
+        if (isTransient && attempt < MAX_RETRIES) {
+          const delay = (attempt + 1) * 1500 // 1.5s, 3s
+          await new Promise(r => setTimeout(r, delay))
+          return sendMessageDirect(messageText, attempt + 1)
+        }
+        throw new Error(data.fallbackMessage || data.error || 'Failed to get response')
+      }
+
+      // Add AI response
+      const aiReply = {
+        id: Date.now() + 1,
+        channel: channelId,
+        sender: data.sender || (dmTarget || 'Council'),
+        senderEmoji: data.senderEmoji || '\u{1F916}',
+        senderColor: data.senderColor,
+        text: data.message,
+        timestamp: data.timestamp || new Date().toISOString(),
+        isDM: !!dmTarget,
+        dmTarget: dmTarget ? 'You' : undefined,
+        model: data.model,
+      }
+
+      setMessages(prev => {
+        const next = [...prev, aiReply]
+        storeMessages(next)
+        return next
+      })
+
+    } catch (err) {
+      console.error('[AgentChat] Error:', err)
+      setError(err.message)
+
+      // Add error message with retry capability
+      const errorMsg = {
+        id: Date.now() + 1,
+        channel: channelId,
+        sender: 'System',
+        senderEmoji: '\u{26A0}\u{FE0F}',
+        text: `Connection error: ${err.message}`,
+        timestamp: new Date().toISOString(),
+        isError: true,
+        retryable: true,
+        originalMessage: messageText,
+      }
+
+      setMessages(prev => {
+        const next = [...prev, errorMsg]
+        storeMessages(next)
+        return next
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [selectedChannel, dmTarget, getConversationHistory])
+
   const sendMessage = useCallback(async () => {
     if (!input.trim() || isLoading) return
 
@@ -88,74 +193,9 @@ export default function AgentChat({ agents, isOpen, onClose, onOpen }) {
     setMessages(updatedMessages)
     storeMessages(updatedMessages)
     setInput('')
-    setError(null)
-    setIsLoading(true)
 
-    try {
-      // Build conversation history (excluding the message we just added)
-      const history = getConversationHistory()
-
-      const res = await fetch('/api/agents/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: messageText,
-          channel: dmTarget ? null : selectedChannel,
-          agentName: dmTarget || null,
-          conversationHistory: history,
-        }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.fallbackMessage || data.error || 'Failed to get response')
-      }
-
-      // Add AI response
-      const aiReply = {
-        id: Date.now() + 1,
-        channel: channelId,
-        sender: data.sender || (dmTarget || 'Council'),
-        senderEmoji: data.senderEmoji || '\u{1F916}',
-        senderColor: data.senderColor,
-        text: data.message,
-        timestamp: data.timestamp || new Date().toISOString(),
-        isDM: !!dmTarget,
-        dmTarget: dmTarget ? 'You' : undefined,
-        model: data.model, // Track which model responded
-      }
-
-      setMessages(prev => {
-        const next = [...prev, aiReply]
-        storeMessages(next)
-        return next
-      })
-
-    } catch (err) {
-      console.error('[AgentChat] Error:', err)
-      setError(err.message)
-
-      // Add error as a system message so it's visible in chat
-      const errorMsg = {
-        id: Date.now() + 1,
-        channel: channelId,
-        sender: 'System',
-        senderEmoji: '\u{26A0}\u{FE0F}',
-        text: `Connection error: ${err.message}. Try again.`,
-        timestamp: new Date().toISOString(),
-        isError: true,
-      }
-
-      setMessages(prev => {
-        const next = [...prev, errorMsg]
-        storeMessages(next)
-        return next
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }, [input, selectedChannel, dmTarget, messages, isLoading, getConversationHistory])
+    await sendMessageDirect(messageText)
+  }, [input, selectedChannel, dmTarget, messages, isLoading, sendMessageDirect])
 
   // Clear chat for current channel/DM
   const clearChat = useCallback(() => {
@@ -350,6 +390,17 @@ export default function AgentChat({ agents, isOpen, onClose, onOpen }) {
                         : 'bg-dark-600 text-gray-300 rounded-tl-sm'
                   }`}>
                     {msg.text}
+                    {msg.retryable && !isLoading && (
+                      <button
+                        onClick={retryLastMessage}
+                        className="mt-1.5 flex items-center gap-1 text-[10px] text-red-300 hover:text-red-200 bg-red-500/10 hover:bg-red-500/20 px-2 py-1 rounded transition-colors"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                        </svg>
+                        Retry
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

@@ -1602,3 +1602,195 @@ body.focus-mode-active .kanban-board {
   transition-duration: 0.15s;
   transition-timing-function: ease;
 }
+
+/* ===============================================================
+   VISUAL UPGRADES — Ambient Effects, Column Gradients, Stat Pills
+   =============================================================== */
+
+/* ── Ambient Background Glow ──────────────────────────────── */
+/* Subtle radial gradient that adds depth to the dark dashboard */
+.ambient-glow {
+  position: relative;
+}
+.ambient-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 60% 40% at 15% 8%, rgba(249, 115, 22, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 35% at 85% 15%, rgba(59, 130, 246, 0.035) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 30% at 50% 90%, rgba(168, 85, 247, 0.025) 0%, transparent 50%);
+}
+[data-theme="light"] .ambient-glow::before {
+  background:
+    radial-gradient(ellipse 60% 40% at 15% 8%, rgba(249, 115, 22, 0.025) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 35% at 85% 15%, rgba(59, 130, 246, 0.02) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 30% at 50% 90%, rgba(168, 85, 247, 0.015) 0%, transparent 50%);
+}
+
+/* ── Kanban Column Header Gradients ──────────────────────── */
+/* Each column gets a colored gradient strip at the top for visual identity */
+.column-header-gradient {
+  position: relative;
+  overflow: hidden;
+}
+.column-header-gradient::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--col-bar, #3b82f6), transparent);
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+.column-header-gradient:hover::before {
+  opacity: 1;
+}
+/* Light mode — slightly more opaque bar */
+[data-theme="light"] .column-header-gradient::before {
+  opacity: 0.5;
+}
+[data-theme="light"] .column-header-gradient:hover::before {
+  opacity: 0.85;
+}
+
+/* ── Enhanced Task Card Hover ────────────────────────────── */
+/* Tinted lift-shadow on hover for a more polished feel */
+.task-card {
+  transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.task-card:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+[data-theme="light"] .task-card:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* ── Stat Pill Styling ───────────────────────────────────── */
+/* Background pills for the stats header numbers */
+.stat-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.stat-pill:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme="light"] .stat-pill {
+  background: rgba(0, 0, 0, 0.025);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+[data-theme="light"] .stat-pill:hover {
+  background: rgba(0, 0, 0, 0.045);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+/* Color-accent variants */
+.stat-pill-green {
+  background: rgba(34, 197, 94, 0.06);
+  border-color: rgba(34, 197, 94, 0.1);
+}
+.stat-pill-green:hover {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.18);
+}
+.stat-pill-orange {
+  background: rgba(249, 115, 22, 0.06);
+  border-color: rgba(249, 115, 22, 0.1);
+}
+.stat-pill-orange:hover {
+  background: rgba(249, 115, 22, 0.1);
+  border-color: rgba(249, 115, 22, 0.18);
+}
+.stat-pill-purple {
+  background: rgba(168, 85, 247, 0.06);
+  border-color: rgba(168, 85, 247, 0.1);
+}
+.stat-pill-purple:hover {
+  background: rgba(168, 85, 247, 0.1);
+  border-color: rgba(168, 85, 247, 0.18);
+}
+
+/* Light mode accent pills */
+[data-theme="light"] .stat-pill-green {
+  background: rgba(34, 197, 94, 0.06);
+  border-color: rgba(34, 197, 94, 0.12);
+}
+[data-theme="light"] .stat-pill-orange {
+  background: rgba(249, 115, 22, 0.06);
+  border-color: rgba(249, 115, 22, 0.12);
+}
+[data-theme="light"] .stat-pill-purple {
+  background: rgba(168, 85, 247, 0.06);
+  border-color: rgba(168, 85, 247, 0.12);
+}
+
+/* ── Header Bar Accent Line ──────────────────────────────── */
+/* Gradient accent along the bottom of the header bar */
+.header-bar {
+  position: relative;
+}
+.header-bar::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(249, 115, 22, 0.3) 20%,
+    rgba(59, 130, 246, 0.2) 50%,
+    rgba(168, 85, 247, 0.3) 80%,
+    transparent 100%
+  );
+  z-index: 1;
+}
+[data-theme="light"] .header-bar::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(249, 115, 22, 0.15) 20%,
+    rgba(59, 130, 246, 0.1) 50%,
+    rgba(168, 85, 247, 0.15) 80%,
+    transparent 100%
+  );
+}
+
+/* ── Column Count Badge Glow ─────────────────────────────── */
+/* Subtle glow on kanban column count badges */
+.column-count-active {
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.15);
+}
+.column-count-done {
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.15);
+}
+.column-count-review {
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.15);
+}
+
+/* ── Idle Shimmer on "Online" Dot ────────────────────────── */
+/* The green "agents online" dot gets a subtle periodic shimmer */
+@keyframes online-shimmer {
+  0%, 100% { box-shadow: 0 0 4px rgba(34, 197, 94, 0.3), 0 0 0 0 rgba(34, 197, 94, 0.15); }
+  50% { box-shadow: 0 0 8px rgba(34, 197, 94, 0.5), 0 0 0 3px rgba(34, 197, 94, 0); }
+}
+.online-shimmer {
+  animation: online-shimmer 3s ease-in-out infinite;
+}
