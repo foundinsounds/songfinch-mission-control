@@ -5,7 +5,7 @@
 import { getAgents, addActivity, getTasks } from '../../../../lib/airtable'
 import { callAI } from '../../../../lib/ai'
 import { NextResponse } from 'next/server'
-import { safeJsonParse } from '../../../../lib/api-utils'
+import { safeJsonParse, badRequest } from '../../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30 // Allow 30s for AI response generation
@@ -42,7 +42,7 @@ export async function POST(request) {
     const { message, channel, agentName, conversationHistory = [] } = body
 
     if (!message?.trim()) {
-      return NextResponse.json({ error: 'Message is required' }, { status: 400 })
+      return badRequest('Message is required')
     }
 
     // Fetch agents to get system prompts and configs

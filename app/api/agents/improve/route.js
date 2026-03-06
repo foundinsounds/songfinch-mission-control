@@ -3,8 +3,7 @@
 
 import { callAI } from '../../../../lib/ai'
 import { MODEL_OPTIONS } from '../../../../lib/constants'
-import { NextResponse } from 'next/server'
-import { safeJsonParse } from '../../../../lib/api-utils'
+import { safeJsonParse, badRequest, successResponse, apiError } from '../../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +14,7 @@ export async function POST(request) {
     const { agent, action } = body
 
     if (!agent) {
-      return NextResponse.json({ error: 'agent is required' }, { status: 400 })
+      return badRequest('agent is required')
     }
 
     if (action === 'suggest-prompt') {
@@ -26,10 +25,9 @@ export async function POST(request) {
       return await generateImprovements(agent)
     }
 
-    return NextResponse.json({ error: 'Invalid action. Use "improve" or "suggest-prompt"' }, { status: 400 })
+    return badRequest('Invalid action. Use "improve" or "suggest-prompt"')
   } catch (error) {
-    console.error('[IMPROVE] Error:', error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return apiError('IMPROVE', error)
   }
 }
 
@@ -62,7 +60,7 @@ Generate a complete, detailed system prompt (500-1500 words). Return ONLY the sy
     userPrompt: prompt,
   })
 
-  return NextResponse.json({ success: true, prompt: result })
+  return successResponse({ prompt: result })
 }
 
 async function generateImprovements(agent) {
@@ -129,7 +127,7 @@ Return ONLY valid JSON, no other text.`
     ]
   }
 
-  return NextResponse.json({ success: true, improvements })
+  return successResponse({ improvements })
 }
 
 function getTypeLabel(type) {

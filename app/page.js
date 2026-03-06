@@ -99,6 +99,7 @@ export default function Roundtable() {
   const [focusModeActive, setFocusModeActive] = useState(false)
   const [contextMenu, setContextMenu] = useState(null) // { x, y, task }
   const [focusedTaskId, setFocusedTaskId] = useState(null)
+  const [systemPaused, setSystemPaused] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [quickFilters, setQuickFilters] = useState({ priorities: [], agents: [], contentTypes: [], statuses: [] })
 
@@ -140,6 +141,13 @@ export default function Roundtable() {
     autoRefreshInterval,
     settingsRev,
   })
+
+  // System pause status check
+  useEffect(() => {
+    fetch('/api/system').then(r => r.json()).then(d => {
+      if (d.paused !== undefined) setSystemPaused(d.paused)
+    }).catch(() => {})
+  }, [])
 
   // Clock
   useEffect(() => {
@@ -292,6 +300,12 @@ export default function Roundtable() {
         Skip to main content
       </a>
       <FaviconBadge tasks={tasks} />
+      {systemPaused && (
+        <div className="bg-red-600 text-white text-center py-2 px-4 text-sm font-medium flex items-center justify-center gap-2">
+          <span className="inline-block w-2 h-2 bg-white rounded-full animate-pulse" />
+          SYSTEM PAUSED — All agent processing is halted. Set SYSTEM_PAUSED=false in Vercel env vars to resume.
+        </div>
+      )}
       {/* Top Header Bar */}
       <StatsHeader
         data={{ stats, sparklines, currentTime, dataSource, lastSync }}

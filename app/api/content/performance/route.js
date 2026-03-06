@@ -4,33 +4,9 @@
 
 import { NextResponse } from 'next/server'
 import { safeJsonParse } from '../../../../lib/api-utils'
+import { airtableRequest, tableUrl } from '../../../../lib/airtable'
 
-const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY
-const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
-const TABLE_NAME = 'Content Performance'
-
-const BASE_URL = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TABLE_NAME)}`
-
-async function airtableRequest(url, options = {}) {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  })
-
-  if (!res.ok) {
-    const error = await res.text()
-    if (res.status === 404 || error.includes('TABLE_NOT_FOUND') || error.includes('NOT_FOUND')) {
-      return { records: [] }
-    }
-    throw new Error(`Airtable error: ${res.status} - ${error}`)
-  }
-
-  return res.json()
-}
+const BASE_URL = tableUrl('Content Performance')
 
 // ---- Performance Scoring Engine ----
 

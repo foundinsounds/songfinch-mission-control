@@ -509,6 +509,15 @@ function isAuthorized(request) {
 }
 
 export async function GET(request) {
+  // KILL SWITCH: Set SYSTEM_PAUSED=true in Vercel env vars to halt all agent processing
+  if (process.env.SYSTEM_PAUSED === 'true') {
+    console.log('[RUNNER] System is PAUSED — skipping cycle')
+    return NextResponse.json({
+      paused: true,
+      message: 'System is paused. Set SYSTEM_PAUSED to false in Vercel env vars to resume.',
+    })
+  }
+
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
