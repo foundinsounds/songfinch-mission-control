@@ -42,6 +42,8 @@ function FilterDropdown({ label, icon, options, selectedValues, onChange, align 
     <div className="relative" ref={ref}>
       <button
         onClick={() => setIsOpen(!isOpen)}
+        aria-expanded={isOpen}
+        aria-label={`Filter by ${label}`}
         className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium border transition-all ${
           hasSelection
             ? 'bg-accent-orange/10 text-accent-orange border-accent-orange/25 shadow-sm shadow-accent-orange/10'

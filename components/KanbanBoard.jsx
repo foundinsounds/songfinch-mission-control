@@ -116,8 +116,10 @@ function ColumnContextMenu({ columnKey, columnLabel, onSort, onCollapse, onSelec
         }}
         className="text-gray-600 hover:text-gray-400 transition-colors p-0.5 rounded hover:bg-white/[0.05]"
         title={`${columnLabel} options`}
+        aria-label={`${columnLabel} column options`}
+        aria-expanded={isOpen}
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+        <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
           <circle cx="12" cy="5" r="2" />
           <circle cx="12" cy="12" r="2" />
           <circle cx="12" cy="19" r="2" />

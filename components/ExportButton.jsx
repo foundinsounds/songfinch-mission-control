@@ -164,6 +164,7 @@ export default function ExportButton({ tasks = [], activity = [] }) {
         className="header-btn px-2 py-1.5 rounded-md flex items-center gap-1.5 text-[11px]"
         title="Export data"
         aria-label="Export data"
+        aria-expanded={showMenu}
       >
         {success ? (
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
