@@ -329,7 +329,7 @@ export default function ListView({ tasks, agents = [], onTaskClick, onQuickAppro
                   {/* Task Name + Description */}
                   <td className="px-4 py-3">
                     <div className="text-[13px] font-semibold text-gray-100 leading-tight">
-                      {task.name}
+                      {task.name || 'Untitled Task'}
                     </div>
                     {task.description && (
                       <div className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">

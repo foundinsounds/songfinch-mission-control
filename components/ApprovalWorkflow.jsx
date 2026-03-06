@@ -119,7 +119,7 @@ export default function ApprovalWorkflow({ tasks, agents, onTaskClick, onApprove
                       </div>
                     )}
                     <div className="min-w-0">
-                      <h4 className="text-sm font-semibold text-gray-100 truncate">{task.name}</h4>
+                      <h4 className="text-sm font-semibold text-gray-100 truncate">{task.name || 'Untitled Task'}</h4>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] text-gray-500">{task.contentType}</span>
                         {task.campaign && <span className="text-[10px] text-gray-600">/ {task.campaign}</span>}

@@ -260,7 +260,7 @@ function HoverPreview({ task, agent, cardRef }) {
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <div className="text-[11px] font-semibold text-gray-200 truncate">{task.name}</div>
+          <div className="text-[11px] font-semibold text-gray-200 truncate">{task.name || 'Untitled Task'}</div>
           <div className="text-[9px] text-gray-500 flex items-center gap-1.5">
             <span className={`inline-block w-1.5 h-1.5 rounded-full ${getStatusDotClass(task.status)}${task.status === 'In Progress' ? ' status-badge-pulse' : ''}`} />
             {task.status} · {task.priority || 'Normal'} priority
@@ -467,7 +467,7 @@ function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChang
 
         {/* Task name */}
         <span className={`text-[11px] font-medium truncate flex-1 ${isDone ? 'text-gray-500 line-through' : 'text-gray-200'}`}>
-          <HighlightText text={task.name} query={searchQuery} />
+          <HighlightText text={task.name || 'Untitled Task'} query={searchQuery} />
         </span>
 
         {/* Agent emoji */}
@@ -542,7 +542,7 @@ function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChang
 
         {/* Task name */}
         <span className={`text-[11px] font-medium truncate flex-1 ${isDone ? 'text-gray-500 line-through' : 'text-gray-200'}`}>
-          <HighlightText text={task.name} query={searchQuery} />
+          <HighlightText text={task.name || 'Untitled Task'} query={searchQuery} />
         </span>
 
         {/* Blocked indicator */}
@@ -672,7 +672,7 @@ function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChang
           />
         )}
         <span className="truncate">
-          <HighlightText text={task.name} query={searchQuery} />
+          <HighlightText text={task.name || 'Untitled Task'} query={searchQuery} />
         </span>
       </h3>
 
