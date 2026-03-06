@@ -2,14 +2,11 @@
 
 import { useMemo } from 'react'
 import { AGENTS } from '../lib/agents'
+import { STATUS_STYLES } from '../lib/constants'
 
-const STATUS_COLORS = {
-  Inbox: { bg: '#6b7280', label: 'Inbox' },
-  Assigned: { bg: '#eab308', label: 'Assigned' },
-  'In Progress': { bg: '#3b82f6', label: 'In Progress' },
-  Review: { bg: '#f97316', label: 'Review' },
-  Done: { bg: '#22c55e', label: 'Done' },
-}
+const STATUS_COLORS = Object.fromEntries(
+  Object.entries(STATUS_STYLES).map(([k, v]) => [k, { bg: v.hex, label: k }])
+)
 
 const STATUS_ORDER = ['Inbox', 'Assigned', 'In Progress', 'Review', 'Done']
 

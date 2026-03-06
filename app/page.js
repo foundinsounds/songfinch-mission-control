@@ -251,7 +251,6 @@ export default function Roundtable() {
       fetch('/api/cron/run-agents')
         .then(res => res.json())
         .then(data => {
-          console.log('[Roundtable] Auto-run result:', data)
           setTimeout(fetchData, 2000)
         })
         .catch(err => console.error('[Roundtable] Auto-run failed:', err))
@@ -409,7 +408,6 @@ export default function Roundtable() {
     try {
       const res = await fetch('/api/cron/run-agents')
       const data = await res.json()
-      console.log('[Roundtable] Agent run result:', data)
       showToast('Agents dispatched', 'success')
       // Refresh data after agents run
       setTimeout(fetchData, 2000)
@@ -427,7 +425,6 @@ export default function Roundtable() {
     try {
       const res = await fetch('/api/campaigns/plan', { method: 'POST' })
       const data = await res.json()
-      console.log('[Roundtable] Campaign plan result:', data)
       showToast('Campaign plan created', 'success')
       setTimeout(fetchData, 2000)
     } catch (err) {
@@ -714,7 +711,7 @@ export default function Roundtable() {
         }
         break
       default:
-        console.log('[Command]', command, entity)
+        break
     }
   }, [handleRunAgents, handleCreateTask, fetchData, tasks])
 

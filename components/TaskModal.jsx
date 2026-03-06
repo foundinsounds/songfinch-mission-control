@@ -8,6 +8,7 @@ import AgentSuggestions from './AgentSuggestions'
 import TaskDependencies from './TaskDependencies'
 import OutputPreview from './OutputPreview'
 import TaskTimer from './TaskTimer'
+import { STATUS_BADGE } from '../lib/constants'
 
 const PRIORITY_COLORS = {
   High: 'bg-red-500/10 text-red-400 border-red-500/20',
@@ -15,13 +16,7 @@ const PRIORITY_COLORS = {
   Low: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
 }
 
-const STATUS_COLORS = {
-  'Inbox': 'bg-gray-500/10 text-gray-400',
-  'Assigned': 'bg-yellow-500/10 text-yellow-400',
-  'In Progress': 'bg-blue-500/10 text-blue-400',
-  'Review': 'bg-orange-500/10 text-orange-400',
-  'Done': 'bg-green-500/10 text-green-400',
-}
+const STATUS_COLORS = STATUS_BADGE
 
 function getPlatformUrl(platform) {
   const urls = {

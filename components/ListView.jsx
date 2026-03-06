@@ -2,16 +2,11 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { AGENTS } from '../lib/agents'
+import { STATUS_BADGE } from '../lib/constants'
 import EmptyState from './EmptyState'
 import TaskHoverPreview, { useHoverPreview } from './TaskHoverPreview'
 
-const STATUS_COLORS = {
-  'Inbox': 'bg-gray-500/10 text-gray-400 border-gray-500/20',
-  'Assigned': 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-  'In Progress': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  'Review': 'bg-orange-500/10 text-orange-400 border-orange-500/20',
-  'Done': 'bg-green-500/10 text-green-400 border-green-500/20',
-}
+const STATUS_COLORS = STATUS_BADGE
 
 const PRIORITY_DOT = {
   High: 'bg-red-500',

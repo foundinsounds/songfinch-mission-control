@@ -2,14 +2,9 @@
 
 import { useState, useMemo } from 'react'
 import { AGENTS } from '../lib/agents'
+import { STATUS_HEX } from '../lib/constants'
 
-const STATUS_COLORS = {
-  Inbox: '#6b7280',
-  Assigned: '#eab308',
-  'In Progress': '#3b82f6',
-  Review: '#f97316',
-  Done: '#22c55e',
-}
+const STATUS_COLORS = STATUS_HEX
 
 const PRIORITY_COLORS = {
   High: '#ef4444',

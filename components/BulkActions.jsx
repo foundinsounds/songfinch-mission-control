@@ -1,14 +1,9 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import { STATUS_HEX } from '../lib/constants'
 
-const STATUS_COLORS = {
-  Inbox: '#6b7280',
-  Assigned: '#eab308',
-  'In Progress': '#3b82f6',
-  Review: '#f97316',
-  Done: '#22c55e',
-}
+const STATUS_COLORS = STATUS_HEX
 
 /**
  * Bulk Actions Toolbar — appears when tasks are selected
