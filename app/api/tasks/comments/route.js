@@ -3,6 +3,7 @@
 // Stored in Airtable 'Task Comments' table
 
 import { NextResponse } from 'next/server'
+import { safeJsonParse } from '../../../../lib/api-utils'
 
 const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY
 const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
@@ -78,7 +79,8 @@ export async function GET(request) {
 // POST — Add a comment to a task
 export async function POST(request) {
   try {
-    const body = await request.json()
+    const { data: body, error: parseErr } = await safeJsonParse(request)
+    if (parseErr) return parseErr
     const { taskId, taskName, author, type, content } = body
 
     if (!content) {

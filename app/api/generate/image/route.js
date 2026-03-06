@@ -6,6 +6,7 @@ import { generateImage, autoPreset, extractVisualPrompt } from '../../../../lib/
 import { uploadImage } from '../../../../lib/blob-upload'
 import { addActivity, addContent } from '../../../../lib/airtable'
 import { NextResponse } from 'next/server'
+import { safeJsonParse } from '../../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // Image generation is fast (10-30s typically)
@@ -28,7 +29,8 @@ export async function POST(request) {
   const startTime = Date.now()
 
   try {
-    const body = await request.json()
+    const { data: body, error: parseErr } = await safeJsonParse(request)
+    if (parseErr) return parseErr
 
     const {
       prompt: directPrompt,

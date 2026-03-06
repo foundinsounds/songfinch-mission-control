@@ -5,6 +5,7 @@
 import { getAgents, addActivity, getTasks } from '../../../../lib/airtable'
 import { callAI } from '../../../../lib/ai'
 import { NextResponse } from 'next/server'
+import { safeJsonParse } from '../../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30 // Allow 30s for AI response generation
@@ -36,7 +37,8 @@ const CHANNEL_PROMPTS = {
 
 export async function POST(request) {
   try {
-    const body = await request.json()
+    const { data: body, error } = await safeJsonParse(request)
+    if (error) return error
     const { message, channel, agentName, conversationHistory = [] } = body
 
     if (!message?.trim()) {

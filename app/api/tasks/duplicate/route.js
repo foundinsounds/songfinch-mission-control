@@ -1,12 +1,15 @@
 // Task Duplication API — clones a task with a new name
 import { getTasks, createTask } from '../../../../lib/airtable'
 import { NextResponse } from 'next/server'
+import { safeJsonParse } from '../../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request) {
   try {
-    const { taskId } = await request.json()
+    const { data: body, error } = await safeJsonParse(request)
+    if (error) return error
+    const { taskId } = body
     if (!taskId) {
       return NextResponse.json({ error: 'taskId required' }, { status: 400 })
     }

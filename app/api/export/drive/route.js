@@ -5,6 +5,7 @@
 import { exportToDrive, isDriveConfigured, getDriveStatus } from '../../../../lib/drive'
 import { getTasks, updateTask, addActivity } from '../../../../lib/airtable'
 import { NextResponse } from 'next/server'
+import { safeJsonParse } from '../../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -54,7 +55,8 @@ export async function POST(request) {
       }, { status: 503 })
     }
 
-    const body = await request.json()
+    const { data: body, error: parseErr } = await safeJsonParse(request)
+    if (parseErr) return parseErr
     const { taskId, taskIds, exportAll, status: filterStatus } = body
 
     // Determine which tasks to export

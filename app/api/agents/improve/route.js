@@ -4,12 +4,15 @@
 import { callAI } from '../../../../lib/ai'
 import { MODEL_OPTIONS } from '../../../../lib/constants'
 import { NextResponse } from 'next/server'
+import { safeJsonParse } from '../../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request) {
   try {
-    const { agent, action } = await request.json()
+    const { data: body, error } = await safeJsonParse(request)
+    if (error) return error
+    const { agent, action } = body
 
     if (!agent) {
       return NextResponse.json({ error: 'agent is required' }, { status: 400 })

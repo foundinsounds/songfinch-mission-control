@@ -4,6 +4,7 @@
 
 import { NextResponse } from 'next/server'
 import { getAllActivity, addActivity } from '../../../../lib/airtable'
+import { safeJsonParse } from '../../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,7 +79,8 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const body = await request.json()
+    const { data: body, error: parseErr } = await safeJsonParse(request)
+    if (parseErr) return parseErr
     const { type, mode, agent, results, durationMs, error } = body
 
     await addActivity({

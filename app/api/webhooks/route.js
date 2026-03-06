@@ -4,6 +4,7 @@
 
 import { addActivity } from '../../../lib/airtable'
 import { NextResponse } from 'next/server'
+import { safeJsonParse } from '../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,8 @@ const VALID_EVENTS = [
 // ── REGISTER WEBHOOK ──
 export async function POST(request) {
   try {
-    const body = await request.json()
+    const { data: body, error } = await safeJsonParse(request)
+    if (error) return error
 
     // If body has 'event' field, it's a notification dispatch request
     if (body.event && body.data) {

@@ -3,6 +3,7 @@
 // Each goal has conditions, frequency, and assigned agent(s)
 
 import { NextResponse } from 'next/server'
+import { safeJsonParse } from '../../../lib/api-utils'
 
 const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY
 const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
@@ -125,7 +126,8 @@ export async function GET(request) {
 // PATCH — Update a goal (e.g., Last Triggered, Tasks Generated, Status)
 export async function PATCH(request) {
   try {
-    const body = await request.json()
+    const { data: body, error: parseErr } = await safeJsonParse(request)
+    if (parseErr) return parseErr
     const { id, ...updates } = body
 
     if (!id) {
@@ -165,7 +167,8 @@ export async function PATCH(request) {
 // POST — Create a new goal
 export async function POST(request) {
   try {
-    const body = await request.json()
+    const { data: body, error: parseErr } = await safeJsonParse(request)
+    if (parseErr) return parseErr
     const { name, description, agent, priority, frequency, contentType, campaign } = body
 
     if (!name || !agent) {

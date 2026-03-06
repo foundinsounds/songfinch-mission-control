@@ -6,6 +6,7 @@
 import { generateVideo, generateVideoFromText, buildVideoPrompt } from '../../../../lib/ltx'
 import { addActivity, addContent, updateTask } from '../../../../lib/airtable'
 import { NextResponse } from 'next/server'
+import { safeJsonParse } from '../../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // Video generation can take 1-5 minutes
@@ -40,7 +41,8 @@ export async function POST(request) {
       )
     }
 
-    const body = await request.json()
+    const { data: body, error: parseErr } = await safeJsonParse(request)
+    if (parseErr) return parseErr
 
     const {
       prompt: directPrompt,

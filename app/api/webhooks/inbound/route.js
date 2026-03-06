@@ -4,6 +4,7 @@
 
 import { NextResponse } from 'next/server'
 import { createTask, updateTask, getTasks, addActivity } from '../../../../lib/airtable'
+import { safeJsonParse } from '../../../../lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,8 @@ export async function POST(request) {
   }
 
   try {
-    const body = await request.json()
+    const { data: body, error: parseErr } = await safeJsonParse(request)
+    if (parseErr) return parseErr
     const { action, payload } = body
 
     if (!action || !VALID_ACTIONS.includes(action)) {

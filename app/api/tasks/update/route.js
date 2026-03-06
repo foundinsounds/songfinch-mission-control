@@ -1,9 +1,11 @@
 import { updateTask, addActivity, addContent } from '../../../../lib/airtable'
 import { NextResponse } from 'next/server'
+import { safeJsonParse } from '../../../../lib/api-utils'
 
 export async function POST(request) {
   try {
-    const body = await request.json()
+    const { data: body, error } = await safeJsonParse(request)
+    if (error) return error
     const { recordId, fields, taskContext } = body
 
     if (!recordId || !fields) {

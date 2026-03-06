@@ -3,6 +3,7 @@
 // Stores: feedback patterns, successful strategies, content preferences, learnings
 
 import { NextResponse } from 'next/server'
+import { safeJsonParse } from '../../../lib/api-utils'
 
 const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY
 const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
@@ -138,7 +139,8 @@ export async function GET(request) {
 // POST — Add a new memory (with deduplication)
 export async function POST(request) {
   try {
-    const body = await request.json()
+    const { data: body, error: parseErr } = await safeJsonParse(request)
+    if (parseErr) return parseErr
     const { agent, type, content, source, importance, taskContext } = body
 
     if (!agent || !content) {
