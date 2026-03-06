@@ -85,7 +85,7 @@ export async function POST(request) {
       'Task': 'Batch Generator',
       'Details': `Processed ${batch.length} tasks: ${results.completed.length} completed, ${results.failed.length} failed. Duration: ${Date.now() - startTime}ms`,
       'Type': 'Content Generated',
-    }).catch(() => {})
+    }).catch(err => console.warn('[BATCH] Activity log failed:', err.message))
 
     return NextResponse.json({
       message: `Batch processed ${batch.length} tasks`,
@@ -155,7 +155,7 @@ async function processTask(task, agents) {
     'Content Type': task.contentType || 'General',
     'Status': 'Draft',
     'Agent': agent.name,
-  }).catch(() => {})
+  }).catch(err => console.warn('[BATCH] Content library save failed:', err.message))
 
   await addActivity({
     'Agent': agent.name,
@@ -163,7 +163,7 @@ async function processTask(task, agents) {
     'Task': task.name,
     'Details': `Batch-generated ${task.contentType || 'content'} (${output.length} chars)`,
     'Type': 'Content Generated',
-  }).catch(() => {})
+  }).catch(err => console.warn('[BATCH] Activity log failed:', err.message))
 
   return { outputLength: output.length }
 }

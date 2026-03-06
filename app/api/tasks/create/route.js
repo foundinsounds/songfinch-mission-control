@@ -34,7 +34,7 @@ export async function POST(request) {
       'Task': name,
       'Details': `Task created${scheduledDate ? ` for ${scheduledDate}` : ''}${agent ? ` and assigned to ${agent}` : ''}`,
       'Type': 'Task Created',
-    }).catch(() => {})
+    }).catch(err => console.warn('[TASKS] Activity log failed:', err.message))
 
     return NextResponse.json({ success: true, record: result.records?.[0] })
   } catch (error) {

@@ -600,7 +600,7 @@ export async function GET(request) {
           'Task': 'Pipeline',
           'Details': `WIP limit enforced: drained ${drained} excess Assigned tasks back to Inbox. Target: ${MAX_GLOBAL_WIP} max active tasks. ${toDrain.length - drained} more to drain in subsequent cycles.`,
           'Type': 'Comment',
-        }).catch(() => {})
+        }).catch(err => console.warn('[CRON] WIP-drain activity log failed:', err.message))
       }
     }
 
@@ -628,7 +628,7 @@ export async function GET(request) {
           'Task': stalled.name,
           'Details': `Task was stuck in "In Progress" from a previous failed run. Reset to Assigned for retry.`,
           'Type': 'Comment',
-        }).catch(() => {})
+        }).catch(err => console.warn('[CRON] Stall recovery activity log failed:', err.message))
       } catch (err) {
         console.warn(`[RUNNER] Stall recovery failed for "${stalled.name}":`, err.message)
       }
@@ -643,7 +643,7 @@ export async function GET(request) {
         type: 'stall_recovery',
         message: `Recovered ${stalledTasks.length} stalled tasks`,
         details: stalledTasks.map(t => `• "${t.name}" (${t.agent})`).join('\n'),
-      }).catch(() => {})
+      }).catch(err => console.warn('[CRON] Slack stall alert failed:', err.message))
     }
 
     // 5. STALE TASK RECYCLER: Tasks assigned for 24h+ without progress get reassigned
@@ -662,7 +662,7 @@ export async function GET(request) {
       const newAgent = findBestAgent(task, agents, tasks, skillData)
       if (newAgent && newAgent !== task.agent) {
         const oldAgent = task.agent
-        await updateTask(task.id, { 'Agent': newAgent, 'Status': 'Assigned' }).catch(() => {})
+        await updateTask(task.id, { 'Agent': newAgent, 'Status': 'Assigned' }).catch(err => console.warn('[CRON] Stale task reassign failed:', err.message))
         task.agent = newAgent
         recycled.push({ task: task.name, from: oldAgent, to: newAgent })
         await addActivity({
@@ -671,7 +671,7 @@ export async function GET(request) {
           'Task': task.name,
           'Details': `Task stale for 48h+ with ${oldAgent}. Reassigned to ${newAgent} for fresh attempt.`,
           'Type': 'Comment',
-        }).catch(() => {})
+        }).catch(err => console.warn('[CRON] Stale recycle activity log failed:', err.message))
       }
     }
 
@@ -751,7 +751,7 @@ export async function GET(request) {
             'Details': `Processing ${task.contentType || 'content'} with ${agent.model}`,
             'Type': 'Task Created',
           }),
-        ]).catch(() => {})
+        ]).catch(err => console.warn('[CRON] Task start status update failed:', err.message))
       )
     )
 
@@ -802,7 +802,7 @@ export async function GET(request) {
         await updateTask(task.id, {
           'Status': revertStatus,
           ...(failNote ? { 'Output': failNote } : {}),
-        }).catch(() => {})
+        }).catch(err => console.warn('[CRON] Task revert failed:', err.message))
 
         console.log(`[RUNNER] ↩️ Reverted "${task.name}" to ${revertStatus} (attempt ${retries}/${maxRetries})`)
 
@@ -812,7 +812,7 @@ export async function GET(request) {
           'Task': task.name,
           'Details': `Failed (attempt ${retries}/${maxRetries}): ${err?.message}. Status → ${revertStatus}.${retries >= 3 ? ' Consider reassigning agent.' : ''}`,
           'Type': 'Comment',
-        }).catch(() => {})
+        }).catch(err => console.warn('[CRON] Error activity log failed:', err.message))
       }
     }
 
@@ -841,7 +841,7 @@ export async function GET(request) {
       'Task': 'Agent Runner',
       'Details': `Processed ${results.processed.length}/${assignedTasks.length} tasks in ${duration}ms. Reviewed: ${reviewData?.results?.approved?.length || 0} approved, ${reviewData?.results?.revised?.length || 0} revised. ${results.errors.length} errors.`,
       'Type': 'Comment',
-    }).catch(() => {})
+    }).catch(err => console.warn('[CRON] Run summary activity log failed:', err.message))
 
     // Slack notification for cron cycle
     notifyCronCycle({
@@ -851,7 +851,7 @@ export async function GET(request) {
       reviewed: (reviewData?.results?.approved?.length || 0) + (reviewData?.results?.revised?.length || 0),
       errors: results.errors.length,
       duration: `${duration}ms`,
-    }).catch(() => {})
+    }).catch(err => console.warn('[CRON] Slack cron notify failed:', err.message))
 
     // Pipeline health alerts
     const inboxCount = tasks.filter(t => t.status === 'Inbox').length
@@ -860,7 +860,7 @@ export async function GET(request) {
         type: 'low_queue',
         message: `${inboxCount} unassigned tasks piling up in Inbox`,
         details: 'Consider running campaign planner or manually assigning tasks.',
-      }).catch(() => {})
+      }).catch(err => console.warn('[CRON] Slack pipeline alert failed:', err.message))
     }
 
     return NextResponse.json({
@@ -1034,7 +1034,7 @@ async function processTask(task, agent, memoryCache, activity) {
         if (driveResult?.url) {
           console.log(`[RUNNER] 📁 Exported to Drive: "${task.name}" → ${driveResult.url}`)
           // Update task with Drive link (fire-and-forget)
-          updateTask(task.id, { 'Google Drive Link': driveResult.url }).catch(() => {})
+          updateTask(task.id, { 'Google Drive Link': driveResult.url }).catch(err => console.warn('[CRON] Drive link update failed:', err.message))
           return driveResult.url
         }
         return null

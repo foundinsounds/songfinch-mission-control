@@ -43,7 +43,7 @@ export async function POST(request) {
       'Task': taskName || 'Task',
       'Details': `Feedback: ${feedback.substring(0, 500)}`,
       'Type': 'Comment',
-    }).catch(() => {})
+    }).catch(err => console.warn('[FEEDBACK] Activity log failed:', err.message))
 
     return NextResponse.json({
       success: true,

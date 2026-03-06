@@ -174,7 +174,7 @@ export async function POST(request) {
             agent: task.agent,
             score: verdict.score,
             feedback: `[MUSE Creative QA] ${verdict.feedback}`,
-          }).catch(() => {})
+          }).catch(err => console.warn('[REVIEWER] Slack MUSE notify failed:', err.message))
 
           console.log(`[REVIEWER] 🎨 MUSE polish requested: "${task.name}" (${verdict.score}/5)`)
 
@@ -212,7 +212,7 @@ export async function POST(request) {
             agent: task.agent,
             score: verdict.score,
             summary: verdict.summary,
-          }).catch(() => {})
+          }).catch(err => console.warn('[REVIEWER] Slack approve notify failed:', err.message))
 
           // AUTO-IMAGE: Fire-and-forget visual companion
           const visualTypes = new Set(['Social Post', 'Ad Copy', 'Blog Post', 'Video Script', 'Landing Page'])
@@ -259,7 +259,7 @@ export async function POST(request) {
               if (driveResult?.url) {
                 console.log(`[REVIEWER] 📁 ✅ Exported to Drive: "${task.name}" → ${driveResult.url}`)
                 // Update task with Drive link (best-effort)
-                updateTask(task.id, { 'Drive Link': driveResult.url }).catch(() => {})
+                updateTask(task.id, { 'Drive Link': driveResult.url }).catch(err => console.warn('[REVIEWER] Drive link update failed:', err.message))
               }
             }).catch(driveErr => {
               console.warn(`[REVIEWER] 📁 Drive export failed for "${task.name}":`, driveErr.message)
@@ -307,7 +307,7 @@ export async function POST(request) {
             agent: task.agent,
             score: verdict.score,
             feedback: verdict.feedback,
-          }).catch(() => {})
+          }).catch(err => console.warn('[REVIEWER] Slack revision notify failed:', err.message))
 
           console.log(`[REVIEWER] 🔄 Revision requested: "${task.name}" (${verdict.score}/5)`)
         }
@@ -324,7 +324,7 @@ export async function POST(request) {
       'Task': 'Auto-Review',
       'Details': `Reviewed ${toReview.length} tasks: ${results.approved.length} approved, ${results.revised.length} revised, ${results.musePolished.length} MUSE polish. ${results.errors.length} errors.`,
       'Type': 'Comment',
-    }).catch(() => {})
+    }).catch(err => console.warn('[REVIEWER] Activity log failed:', err.message))
 
     // Slack summary for review cycle
     notifyReviewCycle({
@@ -333,7 +333,7 @@ export async function POST(request) {
       revised: results.revised.length,
       musePolished: results.musePolished.length,
       errors: results.errors.length,
-    }).catch(() => {})
+    }).catch(err => console.warn('[REVIEWER] Slack review cycle notify failed:', err.message))
 
     // AUTO-REFILL: If review queue is nearly empty, trigger CMO planning
     // This keeps the pipeline continuously fed without waiting for cron
@@ -341,7 +341,7 @@ export async function POST(request) {
     const freshTasks = tasks.filter(t => ['Queued', 'Assigned', 'In Progress'].includes(t.status))
     if (remainingReview === 0 && freshTasks.length < 10) {
       console.log(`[REVIEWER] 🔄 Review queue empty + only ${freshTasks.length} in pipeline — triggering auto-refill`)
-      triggerAutoRefill().catch(() => {})
+      triggerAutoRefill().catch(err => console.warn('[REVIEWER] Auto-refill trigger failed:', err.message))
       results.autoRefillTriggered = true
     }
 

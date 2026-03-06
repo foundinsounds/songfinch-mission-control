@@ -151,7 +151,7 @@ export async function POST(request) {
       'Task': 'Drive Export',
       'Details': `Exported ${results.exported.length}/${tasksToExport.length} tasks to Google Drive.${errorSummary}`,
       'Type': 'Content Generated',
-    }).catch(() => {})
+    }).catch(err => console.warn('[DRIVE] Activity log failed:', err.message))
 
     const duration = Date.now() - startTime
 

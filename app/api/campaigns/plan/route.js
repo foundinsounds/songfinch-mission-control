@@ -287,7 +287,7 @@ export async function POST(request) {
       'Task': campaignName,
       'Details': `Auto-generated ${created.length} content tasks for ${weeksAhead} week(s). Campaign: ${campaignName}. Pipeline: ${activeTasks.length} active → ${activeTasks.length + created.length} active.`,
       'Type': 'Content Generated',
-    }).catch(() => {})
+    }).catch(err => console.warn('[CAMPAIGN] Activity log failed:', err.message))
 
     // Slack notification for campaign planning
     const contentTypesCreated = [...new Set(created.map(t => t.contentType).filter(Boolean))]
@@ -301,7 +301,7 @@ export async function POST(request) {
       tasksCreated: created.length,
       contentTypes: contentTypesCreated,
       territories: territoriesCreated,
-    }).catch(() => {})
+    }).catch(err => console.warn('[CAMPAIGN] Slack notification failed:', err.message))
 
     return NextResponse.json({
       message: `CMO planned ${created.length} tasks for "${campaignName}"`,

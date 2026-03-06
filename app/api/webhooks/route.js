@@ -74,7 +74,7 @@ export async function POST(request) {
       'Task': name || url,
       'Details': `Registered webhook "${name || id}" for events: ${hookEvents.join(', ')}`,
       'Type': 'Comment',
-    }).catch(() => {})
+    }).catch(err => console.warn('[WEBHOOK] Activity log failed:', err.message))
 
     return NextResponse.json({
       message: 'Webhook registered',

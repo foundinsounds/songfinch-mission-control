@@ -248,7 +248,7 @@ export async function POST(request) {
         importance,
         taskContext: contentType || '',
       }),
-    }).catch(() => {}) // Fire-and-forget
+    }).catch(err => console.warn('[PERF] Memory feedback failed:', err.message))
 
     return NextResponse.json({
       success: true,

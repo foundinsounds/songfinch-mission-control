@@ -58,7 +58,7 @@ export async function POST(request) {
           'Task': name,
           'Details': `External webhook created task. Type: ${contentType || 'General'}, Priority: ${priority || 'Medium'}`,
           'Type': 'Task Created',
-        }).catch(() => {})
+        }).catch(err => console.warn('[WEBHOOK] Activity log failed:', err.message))
 
         result = { created: name, status: 'Inbox' }
         break
