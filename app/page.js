@@ -62,8 +62,9 @@ import { useKeyboardNavigation } from '../lib/useKeyboardNavigation'
 import { useTaskSearch } from '../lib/useTaskSearch'
 import { useCommandHandler } from '../lib/useCommandHandler'
 import { useDataFetching } from '../lib/useDataFetching'
-import { playApproveSound, playCompleteSound, playErrorSound, playCreateSound, playDropSound, playStatusChangeSound } from '../lib/sounds'
-import { fireConfetti } from '../lib/confetti'
+import { useTheme } from '../lib/useTheme'
+import { useTaskActions } from '../lib/useTaskActions'
+import { playDropSound } from '../lib/sounds'
 import { useToast } from '../components/ToastProvider'
 
 export default function Roundtable() {
@@ -126,30 +127,8 @@ export default function Roundtable() {
     return () => window.removeEventListener('roundtable-settings-changed', handler)
   }, [])
 
-  // Theme state
-  const [theme, setTheme] = useState('dark')
-
-  // Initialize theme from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('roundtable-theme') || 'dark'
-    setTheme(saved)
-    document.documentElement.setAttribute('data-theme', saved)
-  }, [])
-
-  // Toggle theme
-  const toggleTheme = useCallback(() => {
-    setTheme(prev => {
-      const next = prev === 'dark' ? 'light' : 'dark'
-      localStorage.setItem('roundtable-theme', next)
-      document.documentElement.setAttribute('data-theme', next)
-      if (next === 'light') {
-        document.documentElement.classList.add('light')
-      } else {
-        document.documentElement.classList.remove('light')
-      }
-      return next
-    })
-  }, [])
+  // Theme (extracted to hook)
+  const { theme, toggleTheme } = useTheme()
 
   // Data fetching, polling, and auto-run (extracted to hook)
   const { fetchData, getSettings, lastSync, isSyncing } = useDataFetching({
@@ -172,129 +151,15 @@ export default function Roundtable() {
     setAgents(prev => prev.map(a => a.id === updatedAgent.id ? { ...a, ...updatedAgent } : a))
   }, [])
 
-  // Handle task approval
-  const handleApproveTask = useCallback(async (task) => {
-    try {
-      const res = await fetch('/api/tasks/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recordId: task.id,
-          fields: { Status: 'Done' },
-          taskContext: {
-            output: task.output,
-            contentType: task.contentType,
-            platform: Array.isArray(task.platform) ? task.platform.join(', ') : (task.platform || ''),
-            agent: task.agent,
-            campaign: task.campaign,
-          },
-        }),
-      })
-
-      if (!res.ok) throw new Error('Failed to approve task')
-
-      setTasks(prev => prev.map(t =>
-        t.id === task.id ? { ...t, status: 'Done' } : t
-      ))
-      setSelectedTask(null)
-      playApproveSound()
-      fireConfetti({ particleCount: 50 })
-      showToast(`"${task.name}" approved ✓`, 'success')
-      setTimeout(fetchData, 1000)
-      return true
-    } catch (err) {
-      console.error('Failed to approve task:', err)
-      playErrorSound()
-      showToast('Failed to approve task', 'error')
-      return false
-    }
-  }, [fetchData, showToast])
-
-  // Handle task status update
-  const handleUpdateTaskStatus = useCallback(async (task, newStatus) => {
-    try {
-      const res = await fetch('/api/tasks/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recordId: task.id,
-          fields: { Status: newStatus },
-        }),
-      })
-
-      if (!res.ok) throw new Error('Failed to update task status')
-
-      setTasks(prev => prev.map(t =>
-        t.id === task.id ? { ...t, status: newStatus } : t
-      ))
-      if (newStatus === 'Done') { playCompleteSound(); fireConfetti({ particleCount: 35 }); showToast(`Task completed ✓`, 'success') }
-      else { playStatusChangeSound(); showToast(`Moved to ${newStatus}`, 'info') }
-      setTimeout(fetchData, 1000)
-      return true
-    } catch (err) {
-      console.error('Failed to update task:', err)
-      playErrorSound()
-      showToast('Failed to update task status', 'error')
-      return false
-    }
-  }, [fetchData, showToast])
-
-  // Retry failed task — reset to Assigned and re-trigger
-  const handleRetryTask = useCallback(async (task) => {
-    try {
-      const res = await fetch('/api/tasks/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recordId: task.id,
-          fields: { Status: 'Assigned' },
-        }),
-      })
-
-      if (!res.ok) throw new Error('Failed to retry task')
-
-      setTasks(prev => prev.map(t =>
-        t.id === task.id ? { ...t, status: 'Assigned' } : t
-      ))
-      playStatusChangeSound()
-      showToast('Task queued for retry', 'info')
-      setTimeout(fetchData, 1000)
-      return true
-    } catch (err) {
-      console.error('Failed to retry task:', err)
-      playErrorSound()
-      showToast('Failed to retry task', 'error')
-      return false
-    }
-  }, [fetchData, showToast])
-
-  // Dependency management — add/remove blockedBy entries
-  const handleAddDependency = useCallback((taskId, depId) => {
-    setTasks(prev => prev.map(t => {
-      if (t.id !== taskId) return t
-      const existing = t.blockedBy || []
-      if (existing.includes(depId)) return t
-      return { ...t, blockedBy: [...existing, depId] }
-    }))
-    // Update selected task if it's the one being modified
-    setSelectedTask(prev => {
-      if (!prev || prev.id !== taskId) return prev
-      const existing = prev.blockedBy || []
-      if (existing.includes(depId)) return prev
-      return { ...prev, blockedBy: [...existing, depId] }
-    })
-  }, [])
-
-  const handleRemoveDependency = useCallback((taskId, depId) => {
-    setTasks(prev => prev.map(t => {
-      if (t.id !== taskId) return t
-      return { ...t, blockedBy: (t.blockedBy || []).filter(id => id !== depId) }
-    }))
-    setSelectedTask(prev => {
-      if (!prev || prev.id !== taskId) return prev
-      return { ...prev, blockedBy: (prev.blockedBy || []).filter(id => id !== depId) }
-    })
-  }, [])
+  // Task CRUD operations (extracted to hook)
+  const {
+    handleApproveTask,
+    handleUpdateTaskStatus,
+    handleRetryTask,
+    handleCreateTask,
+    handleAddDependency,
+    handleRemoveDependency,
+  } = useTaskActions({ setTasks, setSelectedTask, fetchData, showToast })
 
   // Run Agents — trigger the cron endpoint manually
   const handleRunAgents = useCallback(async () => {
@@ -326,34 +191,6 @@ export default function Roundtable() {
       showToast('Failed to plan campaign', 'error')
     } finally {
       setTimeout(() => setPlanningCampaign(false), 3000)
-    }
-  }, [fetchData, showToast])
-
-  // Quick-create task handler (from FAB)
-  const handleCreateTask = useCallback(async (taskData) => {
-    try {
-      const res = await fetch('/api/tasks/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(taskData),
-      })
-      if (res.ok) {
-        const created = await res.json()
-        // Optimistically add to local state
-        setTasks(prev => [{ ...taskData, id: created.id || `temp-${Date.now()}`, createdAt: new Date().toISOString() }, ...prev])
-        playCreateSound()
-        showToast(`Task "${taskData.name}" created`, 'success')
-        setTimeout(fetchData, 1500)
-      } else {
-        // Fallback: add locally with temp id
-        setTasks(prev => [{ ...taskData, id: `temp-${Date.now()}`, createdAt: new Date().toISOString() }, ...prev])
-        playCreateSound()
-        showToast('Task created locally (sync pending)', 'warning')
-      }
-    } catch {
-      // Offline fallback
-      setTasks(prev => [{ ...taskData, id: `temp-${Date.now()}`, createdAt: new Date().toISOString() }, ...prev])
-      showToast('Task saved offline — will sync when online', 'warning')
     }
   }, [fetchData, showToast])
 
