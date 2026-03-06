@@ -178,7 +178,7 @@ export default function AgentChat({ agents, isOpen, onClose, onOpen }) {
       {!isOpen && (
         <button
           onClick={onOpen}
-          className="fixed bottom-20 right-5 z-40 w-12 h-12 rounded-full bg-accent-orange/90 text-white shadow-lg hover:bg-accent-orange hover:scale-105 transition-all flex items-center justify-center group"
+          className="fixed bottom-36 md:bottom-28 right-5 md:right-6 z-40 w-12 h-12 rounded-full bg-accent-orange/90 text-white shadow-lg hover:bg-accent-orange hover:scale-105 transition-all flex items-center justify-center group"
           aria-label="Open Agent Chat"
           title="Chat with agents (C)"
         >

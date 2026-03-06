@@ -42,7 +42,7 @@ export default function ScrollToTop({ scrollContainerRef }) {
     <button
       onClick={scrollToTop}
       aria-label="Scroll to top"
-      className={`fixed z-40 bottom-20 right-4 md:bottom-6 md:right-6 w-10 h-10 rounded-full bg-dark-700/90 backdrop-blur border border-dark-400/50 text-gray-400 hover:text-white hover:bg-dark-600 hover:border-dark-300 shadow-lg shadow-black/30 flex items-center justify-center transition-all duration-200 ${
+      className={`fixed z-40 bottom-20 left-4 md:bottom-14 md:left-6 w-10 h-10 rounded-full bg-dark-700/90 backdrop-blur border border-dark-400/50 text-gray-400 hover:text-white hover:bg-dark-600 hover:border-dark-300 shadow-lg shadow-black/30 flex items-center justify-center transition-all duration-200 ${
         visible
           ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto'
           : 'opacity-0 translate-y-4 scale-75 pointer-events-none'

@@ -70,7 +70,7 @@ export default function QuickCreateFAB({ onCreateTask, agents = [] }) {
   const agentList = agents.length > 0 ? agents : AGENTS
 
   return (
-    <div className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-30" ref={panelRef}>
+    <div className="fixed bottom-20 md:bottom-14 right-4 sm:right-6 z-30" ref={panelRef}>
       {/* Expanded create form */}
       {isOpen && (
         <div className="absolute bottom-16 right-0 w-[320px] sm:w-[360px] bg-dark-700 border border-dark-500 rounded-xl shadow-2xl animate-slide-down overflow-hidden">
