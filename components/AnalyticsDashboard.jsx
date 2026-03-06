@@ -499,12 +499,10 @@ export default function AnalyticsDashboard({ agents, tasks, activity, onConfigAg
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Output Volume (Characters)</h3>
             <div className="bg-dark-700 rounded-lg border border-dark-500 p-4">
               <div className="space-y-3">
-                {(s.agentPerformance || [])
-                  .filter(a => a.outputVolume > 0)
-                  .sort((a, b) => b.outputVolume - a.outputVolume)
-                  .map(agent => {
-                    const maxVol = Math.max(...(s.agentPerformance || []).map(a => a.outputVolume))
-                    return (
+                {(() => {
+                  const sorted = (s.agentPerformance || []).filter(a => a.outputVolume > 0).sort((a, b) => b.outputVolume - a.outputVolume)
+                  const maxVol = sorted.length > 0 ? sorted[0].outputVolume : 1
+                  return sorted.map(agent => (
                       <div key={agent.name}>
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-[11px] text-gray-300">
@@ -516,8 +514,8 @@ export default function AnalyticsDashboard({ agents, tasks, activity, onConfigAg
                         </div>
                         <MiniBar value={agent.outputVolume} max={maxVol} color="bg-accent-purple" height="h-1.5" />
                       </div>
-                    )
-                  })}
+                    ))
+                })()}
               </div>
             </div>
           </div>
@@ -570,8 +568,9 @@ export default function AnalyticsDashboard({ agents, tasks, activity, onConfigAg
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Territory Balance</h3>
               <div className="bg-dark-700 rounded-lg border border-dark-500 p-4">
                 <div className="flex items-end gap-1 h-32">
-                  {s.territoryCoverage.map(t => {
+                  {(() => {
                     const maxPct = Math.max(...s.territoryCoverage.map(x => x.percentage), 1)
+                    return s.territoryCoverage.map(t => {
                     const barHeight = Math.max(8, (t.percentage / maxPct) * 100)
                     const colors = TERRITORY_COLORS[t.name] || TERRITORY_COLORS.Celebration
                     return (
@@ -584,7 +583,8 @@ export default function AnalyticsDashboard({ agents, tasks, activity, onConfigAg
                         <span className="text-[9px] text-gray-500 mt-2">{t.name}</span>
                       </div>
                     )
-                  })}
+                  })
+                  })()}
                 </div>
                 <div className="mt-3 pt-3 border-t border-dark-600">
                   <div className="text-[10px] text-gray-500 text-center">

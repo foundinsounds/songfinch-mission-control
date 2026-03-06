@@ -932,8 +932,10 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
                     onClick={() => toggleCollapse(col.key)}
                     className="text-gray-600 hover:text-gray-400 transition-colors p-0.5"
                     title={collapsedColumns[col.key] ? 'Expand column' : 'Collapse column'}
+                    aria-label={`${collapsedColumns[col.key] ? 'Expand' : 'Collapse'} ${col.label} column`}
+                    aria-expanded={!collapsedColumns[col.key]}
                   >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`transition-transform duration-200 ${collapsedColumns[col.key] ? '-rotate-90' : ''}`}>
+                    <svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`transition-transform duration-200 ${collapsedColumns[col.key] ? '-rotate-90' : ''}`}>
                       <polyline points="6 9 12 15 18 9"/>
                     </svg>
                   </button>

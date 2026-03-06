@@ -312,6 +312,78 @@ export default function Roundtable() {
     if (selectedTaskNavigation.onPrevTask) setSelectedTask(selectedTaskNavigation.onPrevTask)
   }, [selectedTaskNavigation.onPrevTask])
 
+  // ── Bulk-action handlers (stabilised for BulkActions) ─────────────
+  const handleBulkApprove = useCallback(async (ids) => {
+    for (const id of ids) {
+      const task = tasks.find(t => t.id === id)
+      if (task) await handleApproveTask(task)
+    }
+    deselectAll()
+  }, [tasks, handleApproveTask, deselectAll])
+
+  const handleBulkStatusChange = useCallback(async (ids, status) => {
+    for (const id of ids) {
+      const task = tasks.find(t => t.id === id)
+      if (task) await handleUpdateTaskStatus(task, status)
+    }
+    deselectAll()
+  }, [tasks, handleUpdateTaskStatus, deselectAll])
+
+  const handleBulkAssign = useCallback(async (ids, agentName) => {
+    let ok = 0
+    for (const id of ids) {
+      try {
+        await fetch('/api/tasks/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recordId: id, fields: { Agent: agentName } }),
+        })
+        setTasks(prev => prev.map(t => t.id === id ? { ...t, agent: agentName } : t))
+        ok++
+      } catch (err) { console.error('Bulk assign error:', err) }
+    }
+    showToast(`Assigned ${ok} task${ok !== 1 ? 's' : ''} to ${agentName}`, 'success')
+    deselectAll()
+    setTimeout(fetchData, 1000)
+  }, [showToast, deselectAll, fetchData])
+
+  const handleBulkPriorityChange = useCallback(async (ids, priority) => {
+    const label = priority.charAt(0).toUpperCase() + priority.slice(1)
+    let ok = 0
+    for (const id of ids) {
+      try {
+        await fetch('/api/tasks/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recordId: id, fields: { Priority: label } }),
+        })
+        setTasks(prev => prev.map(t => t.id === id ? { ...t, priority: label } : t))
+        ok++
+      } catch (err) { console.error('Bulk priority error:', err) }
+    }
+    showToast(`Updated priority to ${label} for ${ok} task${ok !== 1 ? 's' : ''}`, 'info')
+    deselectAll()
+    setTimeout(fetchData, 1000)
+  }, [showToast, deselectAll, fetchData])
+
+  const handleBulkExportToDrive = useCallback(async (ids) => {
+    showToast(`Exporting ${ids.length} task${ids.length !== 1 ? 's' : ''} to Drive...`, 'info')
+    try {
+      const res = await fetch('/api/export/drive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskIds: ids }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Export failed')
+      showToast(`Exported ${data.count} task${data.count !== 1 ? 's' : ''} to Google Drive`, 'success')
+      deselectAll()
+      setTimeout(fetchData, 1000)
+    } catch (err) {
+      showToast(`Drive export failed: ${err.message}`, 'error')
+    }
+  }, [showToast, deselectAll, fetchData])
+
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Skip navigation link for keyboard users */}
@@ -604,72 +676,11 @@ export default function Roundtable() {
         selectedIds={selectedIds}
         tasks={tasks}
         agents={agents}
-        onApproveAll={async (ids) => {
-          for (const id of ids) {
-            const task = tasks.find(t => t.id === id)
-            if (task) await handleApproveTask(task)
-          }
-          deselectAll()
-        }}
-        onStatusChange={async (ids, status) => {
-          for (const id of ids) {
-            const task = tasks.find(t => t.id === id)
-            if (task) await handleUpdateTaskStatus(task, status)
-          }
-          deselectAll()
-        }}
-        onAssign={async (ids, agentName) => {
-          let ok = 0
-          for (const id of ids) {
-            try {
-              await fetch('/api/tasks/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ recordId: id, fields: { Agent: agentName } }),
-              })
-              setTasks(prev => prev.map(t => t.id === id ? { ...t, agent: agentName } : t))
-              ok++
-            } catch (err) { console.error('Bulk assign error:', err) }
-          }
-          showToast(`Assigned ${ok} task${ok !== 1 ? 's' : ''} to ${agentName}`, 'success')
-          deselectAll()
-          setTimeout(fetchData, 1000)
-        }}
-        onPriorityChange={async (ids, priority) => {
-          const label = priority.charAt(0).toUpperCase() + priority.slice(1)
-          let ok = 0
-          for (const id of ids) {
-            try {
-              await fetch('/api/tasks/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ recordId: id, fields: { Priority: label } }),
-              })
-              setTasks(prev => prev.map(t => t.id === id ? { ...t, priority: label } : t))
-              ok++
-            } catch (err) { console.error('Bulk priority error:', err) }
-          }
-          showToast(`Updated priority to ${label} for ${ok} task${ok !== 1 ? 's' : ''}`, 'info')
-          deselectAll()
-          setTimeout(fetchData, 1000)
-        }}
-        onExportToDrive={async (ids) => {
-          showToast(`Exporting ${ids.length} task${ids.length !== 1 ? 's' : ''} to Drive...`, 'info')
-          try {
-            const res = await fetch('/api/export/drive', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ taskIds: ids }),
-            })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.error || 'Export failed')
-            showToast(`Exported ${data.count} task${data.count !== 1 ? 's' : ''} to Google Drive`, 'success')
-            deselectAll()
-            setTimeout(fetchData, 1000)
-          } catch (err) {
-            showToast(`Drive export failed: ${err.message}`, 'error')
-          }
-        }}
+        onApproveAll={handleBulkApprove}
+        onStatusChange={handleBulkStatusChange}
+        onAssign={handleBulkAssign}
+        onPriorityChange={handleBulkPriorityChange}
+        onExportToDrive={handleBulkExportToDrive}
         onDeselectAll={deselectAll}
       />
 
