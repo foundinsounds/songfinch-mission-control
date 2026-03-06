@@ -64,6 +64,7 @@ import { useCommandHandler } from '../lib/useCommandHandler'
 import { useDataFetching } from '../lib/useDataFetching'
 import { useTheme } from '../lib/useTheme'
 import { useTaskActions } from '../lib/useTaskActions'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 import { playDropSound } from '../lib/sounds'
 import { useToast } from '../components/ToastProvider'
 
@@ -391,6 +392,7 @@ export default function Roundtable() {
           )}
 
           {/* View Content */}
+          <ErrorBoundary name="Dashboard View">
           <ViewTransition viewKey={currentView} className="flex-1 overflow-auto">
             {currentView === 'kanban' && (
               filteredTasks.length === 0 ? (
@@ -528,6 +530,7 @@ export default function Roundtable() {
               </div>
             )}
           </ViewTransition>
+          </ErrorBoundary>
         </div>
 
         {/* Mobile Feed Overlay */}
@@ -543,13 +546,15 @@ export default function Roundtable() {
 
         {/* Live Feed — hidden on mobile unless toggled */}
         <div className={`${mobileFeed ? 'mobile-feed block' : 'hidden'} md:block`}>
-          <LiveFeed
-            activity={activity}
-            filter={feedFilter}
-            onFilterChange={setFeedFilter}
-            collapsed={feedCollapsed}
-            onToggleCollapse={() => setFeedCollapsed(c => !c)}
-          />
+          <ErrorBoundary name="Live Feed">
+            <LiveFeed
+              activity={activity}
+              filter={feedFilter}
+              onFilterChange={setFeedFilter}
+              collapsed={feedCollapsed}
+              onToggleCollapse={() => setFeedCollapsed(c => !c)}
+            />
+          </ErrorBoundary>
         </div>
       </main>
 

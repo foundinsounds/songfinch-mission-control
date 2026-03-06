@@ -1,5 +1,6 @@
 import './globals.css'
 import { ToastProvider } from '../components/ToastProvider'
+import ErrorBoundary from '../components/ErrorBoundary'
 
 export const metadata = {
   title: 'Roundtable — where AI plans',
@@ -23,7 +24,11 @@ export default function RootLayout({ children }) {
         }} />
       </head>
       <body className="bg-dark-900 text-white antialiased">
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <ErrorBoundary name="App">
+            {children}
+          </ErrorBoundary>
+        </ToastProvider>
       </body>
     </html>
   )
