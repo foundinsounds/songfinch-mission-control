@@ -6,6 +6,20 @@ import { SkeletonColumn } from './TaskCardSkeleton'
 import { playDropSound } from '../lib/sounds'
 
 /**
+ * DropIndicator — Reusable drag-and-drop insertion line for card reordering.
+ * Rendered above or below cards during drag operations. Uses accent-orange glow.
+ */
+function DropIndicator({ position = 'above' }) {
+  return (
+    <div className={`absolute ${position === 'above' ? '-top-1.5' : '-bottom-1.5'} left-2 right-2 z-10 flex items-center gap-1`}>
+      <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
+      <div className="flex-1 h-[2px] bg-accent-orange rounded-full shadow-[0_0_8px_rgba(249,115,22,0.4)]" />
+      <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
+    </div>
+  )
+}
+
+/**
  * WipToast — Ephemeral warning toast that appears when a column exceeds
  * its WIP limit. Auto-dismisses after 4 seconds with a shrinking progress bar.
  */
@@ -370,7 +384,6 @@ function InlineQuickAdd({ columnStatus, onCreateTask }) {
 }
 
 export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickApprove, onRequestChanges, onRetry, onStatusChange, selectedAgent, onNewTask, isTaskSelected, onToggleTaskSelect, allTasks = [], focusedTaskId, loading = false, onCreateTask, searchQuery = '', onReorderTasks, onTaskContextMenu }) {
-  const [agentFilter, setAgentFilter] = useState(selectedAgent || null)
   const [sortByPriority, setSortByPriority] = useState(false)
   const [density, setDensity] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -674,12 +687,8 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
     }
   }, [tasks, onStatusChange, dragOverCardIndex, customOrder, saveCustomOrder, fireWipToast, onReorderTasks])
 
-  const visibleTasks = agentFilter
-    ? tasks.filter(t => t.agent === agentFilter)
-    : tasks
-
-  // Get unique agents from tasks
-  const taskAgents = [...new Set(tasks.map(t => t.agent).filter(Boolean))].sort()
+  // Tasks are already filtered by the parent (QuickFiltersBar handles agent/status/priority filtering)
+  const visibleTasks = tasks
 
   // Pipeline progress calculation
   const pipelineStats = useMemo(() => {
@@ -693,105 +702,74 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
 
   return (
     <div className="flex flex-col h-full">
-      {/* Filter + Controls Bar */}
-      <div className="px-4 py-2 border-b border-dark-500 flex items-center gap-1.5 shrink-0 bg-dark-800/30 overflow-x-auto">
-        <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mr-1 shrink-0">Agent:</span>
+      {/* Board Controls Bar — density + sort only (filtering handled by QuickFiltersBar) */}
+      <div className="px-4 py-1.5 border-b border-dark-500/50 flex items-center justify-end gap-1.5 shrink-0 bg-dark-800/20">
         <button
-          onClick={() => setAgentFilter(null)}
-          className={`text-[10px] px-2 py-1 rounded-md transition-all shrink-0 ${
-            !agentFilter
-              ? 'bg-white/10 text-white font-semibold'
-              : 'text-gray-500 hover:text-gray-300 hover:bg-dark-600'
+          onClick={() => setSortByPriority(!sortByPriority)}
+          className={`text-[10px] px-2 py-1 rounded-md transition-all flex items-center gap-1 ${
+            sortByPriority ? 'bg-accent-orange/15 text-accent-orange' : 'text-gray-600 hover:text-gray-400'
           }`}
+          title="Sort all columns by priority"
         >
-          All
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+          </svg>
+          Priority
         </button>
-        {taskAgents.map(name => {
-          const agent = agents.find(a => a.name === name)
-          return (
+        {/* Density Toggle */}
+        <div className="flex items-center gap-0.5 bg-dark-700 rounded-lg p-0.5 border border-dark-500">
+          {[
+            { value: 'comfortable', title: 'Comfortable', icon: (
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <rect x="1" y="1" width="14" height="4" rx="1" />
+                <rect x="1" y="7" width="14" height="4" rx="1" />
+                <rect x="1" y="13" width="14" height="2" rx="0.5" opacity="0.4" />
+              </svg>
+            )},
+            { value: 'compact', title: 'Compact', icon: (
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <rect x="1" y="1" width="14" height="3" rx="1" />
+                <rect x="1" y="6" width="14" height="3" rx="1" />
+                <rect x="1" y="11" width="14" height="3" rx="1" />
+              </svg>
+            )},
+            { value: 'dense', title: 'Dense', icon: (
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <line x1="1" y1="2" x2="15" y2="2" />
+                <line x1="1" y1="5.5" x2="15" y2="5.5" />
+                <line x1="1" y1="9" x2="15" y2="9" />
+                <line x1="1" y1="12.5" x2="15" y2="12.5" />
+              </svg>
+            )},
+          ].map(d => (
             <button
-              key={name}
-              onClick={() => setAgentFilter(agentFilter === name ? null : name)}
-              className={`text-[10px] px-2 py-1 rounded-md transition-all shrink-0 flex items-center gap-1 ${
-                agentFilter === name
-                  ? 'bg-white/10 text-white font-semibold'
-                  : 'text-gray-500 hover:text-gray-300 hover:bg-dark-600'
+              key={d.value}
+              onClick={() => {
+                setDensity(d.value)
+                setCompactMode(d.value !== 'comfortable')
+              }}
+              className={`px-1.5 py-1 rounded-md transition-all flex items-center justify-center ${
+                density === d.value
+                  ? 'bg-accent-orange/20 text-accent-orange border border-accent-orange/30'
+                  : 'text-gray-500 hover:text-gray-300 border border-transparent'
               }`}
+              title={d.title}
             >
-              {agent?.emoji && <span className="text-xs">{agent.emoji}</span>}
-              {name}
+              {d.icon}
             </button>
-          )
-        })}
-
-        <div className="ml-auto flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={() => setSortByPriority(!sortByPriority)}
-            className={`text-[10px] px-2 py-1 rounded-md transition-all flex items-center gap-1 ${
-              sortByPriority ? 'bg-accent-orange/15 text-accent-orange' : 'text-gray-600 hover:text-gray-400'
-            }`}
-            title="Sort by priority"
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
-            </svg>
-            Priority
-          </button>
-          {/* Density Toggle */}
-          <div className="flex items-center gap-0.5 bg-dark-700 rounded-lg p-0.5 border border-dark-500">
-            {[
-              { value: 'comfortable', title: 'Comfortable', icon: (
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <rect x="1" y="1" width="14" height="4" rx="1" />
-                  <rect x="1" y="7" width="14" height="4" rx="1" />
-                  <rect x="1" y="13" width="14" height="2" rx="0.5" opacity="0.4" />
-                </svg>
-              )},
-              { value: 'compact', title: 'Compact', icon: (
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <rect x="1" y="1" width="14" height="3" rx="1" />
-                  <rect x="1" y="6" width="14" height="3" rx="1" />
-                  <rect x="1" y="11" width="14" height="3" rx="1" />
-                </svg>
-              )},
-              { value: 'dense', title: 'Dense', icon: (
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <line x1="1" y1="2" x2="15" y2="2" />
-                  <line x1="1" y1="5.5" x2="15" y2="5.5" />
-                  <line x1="1" y1="9" x2="15" y2="9" />
-                  <line x1="1" y1="12.5" x2="15" y2="12.5" />
-                </svg>
-              )},
-            ].map(d => (
-              <button
-                key={d.value}
-                onClick={() => {
-                  setDensity(d.value)
-                  setCompactMode(d.value !== 'comfortable')
-                }}
-                className={`px-1.5 py-1 rounded-md transition-all flex items-center justify-center ${
-                  density === d.value
-                    ? 'bg-accent-orange/20 text-accent-orange border border-accent-orange/30'
-                    : 'text-gray-500 hover:text-gray-300 border border-transparent'
-                }`}
-                title={d.title}
-              >
-                {d.icon}
-              </button>
-            ))}
-          </div>
-          {/* Show reset column order button if columns have been reordered */}
-          {columnOrder.join(',') !== COLUMNS.map(c => c.key).join(',') && (
-            <button
-              onClick={resetColumnOrder}
-              className="text-[10px] px-2 py-1 rounded-md text-gray-600 hover:text-gray-400 hover:bg-dark-600 transition-all"
-              title="Reset column order"
-            >
-              ↺
-            </button>
-          )}
-          <span className="text-[10px] text-gray-600 font-mono">{visibleTasks.length} tasks</span>
+          ))}
         </div>
+        {/* Show reset column order button if columns have been reordered */}
+        {columnOrder.join(',') !== COLUMNS.map(c => c.key).join(',') && (
+          <button
+            onClick={resetColumnOrder}
+            className="text-[10px] px-2 py-1 rounded-md text-gray-600 hover:text-gray-400 hover:bg-dark-600 transition-all"
+            title="Reset column order"
+          >
+            ↺
+          </button>
+        )}
+        <span className="text-[10px] text-gray-600 font-mono tabular-nums">{visibleTasks.length} tasks</span>
       </div>
 
       {/* Pipeline Progress Bar */}
@@ -907,9 +885,6 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
                     <span className={`text-xs font-semibold tracking-wider ${isOverWip ? 'text-red-400' : isDoneColumn ? 'text-accent-green' : 'text-gray-300'}`}>
                       {col.label}
                     </span>
-                  )}
-                  {stats?.pct > 0 && (
-                    <span className="text-[9px] text-gray-600 font-mono">{stats.pct}%</span>
                   )}
                   {isOverWip && (
                     <span className="text-[8px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20 font-semibold uppercase tracking-wider" title={`WIP limit: ${col.wipLimit}`}>
@@ -1059,22 +1034,8 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
                         ...shiftStyle,
                       }}
                     >
-                      {/* Drop indicator line — intra-column: shows above this card */}
-                      {showIndicatorAbove && (
-                        <div className="absolute -top-1.5 left-2 right-2 z-10 flex items-center gap-1">
-                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
-                          <div className="flex-1 h-[2px] bg-accent-orange rounded-full shadow-[0_0_8px_rgba(249,115,22,0.4)]" />
-                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
-                        </div>
-                      )}
-                      {/* Drop indicator line — cross-column: shows above this card */}
-                      {showCrossIndicatorAbove && (
-                        <div className="absolute -top-1.5 left-2 right-2 z-10 flex items-center gap-1">
-                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
-                          <div className="flex-1 h-[2px] bg-accent-orange rounded-full shadow-[0_0_8px_rgba(249,115,22,0.4)]" />
-                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
-                        </div>
-                      )}
+                      {/* Drop indicator — shows above this card during drag */}
+                      {(showIndicatorAbove || showCrossIndicatorAbove) && <DropIndicator position="above" />}
                       <div
                         draggable
                         onDragStart={(e) => handleDragStart(e, task)}
@@ -1100,22 +1061,8 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
                           animationIndex={idx}
                         />
                       </div>
-                      {/* Drop indicator line — intra-column: shows below the last card */}
-                      {showIndicatorBelow && (
-                        <div className="absolute -bottom-1.5 left-2 right-2 z-10 flex items-center gap-1">
-                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
-                          <div className="flex-1 h-[2px] bg-accent-orange rounded-full shadow-[0_0_8px_rgba(249,115,22,0.4)]" />
-                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
-                        </div>
-                      )}
-                      {/* Drop indicator line — cross-column: shows below the last card */}
-                      {showCrossIndicatorBelow && (
-                        <div className="absolute -bottom-1.5 left-2 right-2 z-10 flex items-center gap-1">
-                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
-                          <div className="flex-1 h-[2px] bg-accent-orange rounded-full shadow-[0_0_8px_rgba(249,115,22,0.4)]" />
-                          <div className="w-1.5 h-1.5 rounded-full bg-accent-orange shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
-                        </div>
-                      )}
+                      {/* Drop indicator — shows below the last card during drag */}
+                      {(showIndicatorBelow || showCrossIndicatorBelow) && <DropIndicator position="below" />}
                     </div>
                   )
                 })}
