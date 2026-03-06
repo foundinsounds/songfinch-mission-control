@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useVisibilityPolling } from '../lib/useVisibilityPolling'
 
 const STATUS_CONFIG = {
   healthy:  { dot: 'bg-accent-green', label: 'Pipeline Healthy',  textClass: 'text-accent-green' },
@@ -37,12 +38,8 @@ export default function PipelineStatusBadge({ pollInterval = 30000 }) {
     }
   }, [])
 
-  // Fetch on mount + poll
-  useEffect(() => {
-    fetchStatus()
-    const id = setInterval(fetchStatus, pollInterval)
-    return () => clearInterval(id)
-  }, [fetchStatus, pollInterval])
+  // Visibility-aware polling — pauses when tab is hidden, resumes on focus
+  useVisibilityPolling(fetchStatus, pollInterval)
 
   // Close dropdown on outside click
   useEffect(() => {

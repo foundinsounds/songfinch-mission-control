@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { MODEL_OPTIONS, MODEL_LEGACY_MAP } from '../lib/constants'
+import { useVisibilityPolling } from '../lib/useVisibilityPolling'
 import PixelAgents from './PixelAgents'
 import AgentPerformanceChart from './AgentPerformanceChart'
 import AgentWorkflowLive from './AgentWorkflowLive'
@@ -111,49 +112,38 @@ export default function AnalyticsDashboard({ agents, tasks, activity, onConfigAg
   const [intel, setIntel] = useState(null)
   const [intelLoading, setIntelLoading] = useState(false)
 
-  // Fetch enhanced stats from API
-  useEffect(() => {
-    let cancelled = false
-    async function fetchStats() {
-      try {
-        const res = await fetch('/api/stats')
-        if (!res.ok) throw new Error('Stats API error')
-        const data = await res.json()
-        if (!cancelled) {
-          setLiveStats(data)
-          setLoading(false)
-        }
-      } catch (err) {
-        console.warn('[Analytics] Stats fetch failed, using local data:', err.message)
-        setLoading(false)
-      }
+  // Fetch enhanced stats from API — visibility-aware (pauses when tab hidden)
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/stats')
+      if (!res.ok) throw new Error('Stats API error')
+      const data = await res.json()
+      setLiveStats(data)
+      setLoading(false)
+    } catch (err) {
+      console.warn('[Analytics] Stats fetch failed, using local data:', err.message)
+      setLoading(false)
     }
-    fetchStats()
-    const poller = setInterval(fetchStats, 30000) // refresh every 30s
-    return () => { cancelled = true; clearInterval(poller) }
   }, [])
 
-  // Fetch intelligence data (lazy — only when tab is active)
-  useEffect(() => {
-    if (tab !== 'intelligence') return
-    let cancelled = false
-    async function fetchIntel() {
-      setIntelLoading(true)
-      try {
-        const res = await fetch('/api/intelligence')
-        if (!res.ok) throw new Error('Intelligence API error')
-        const data = await res.json()
-        if (!cancelled) setIntel(data)
-      } catch (err) {
-        console.warn('[Analytics] Intelligence fetch failed:', err.message)
-      } finally {
-        if (!cancelled) setIntelLoading(false)
-      }
+  useVisibilityPolling(fetchStats, 30_000)
+
+  // Fetch intelligence data — lazy + visibility-aware (only when intelligence tab is active)
+  const fetchIntel = useCallback(async () => {
+    setIntelLoading(true)
+    try {
+      const res = await fetch('/api/intelligence')
+      if (!res.ok) throw new Error('Intelligence API error')
+      const data = await res.json()
+      setIntel(data)
+    } catch (err) {
+      console.warn('[Analytics] Intelligence fetch failed:', err.message)
+    } finally {
+      setIntelLoading(false)
     }
-    fetchIntel()
-    const poller = setInterval(fetchIntel, 60000) // refresh every 60s (heavier endpoint)
-    return () => { cancelled = true; clearInterval(poller) }
-  }, [tab])
+  }, [])
+
+  useVisibilityPolling(fetchIntel, 60_000, { enabled: tab === 'intelligence' })
 
   // Fallback local stats when API hasn't loaded
   const localStats = useMemo(() => {

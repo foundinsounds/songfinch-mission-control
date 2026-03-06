@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
+import { useVisibilityPolling } from '../lib/useVisibilityPolling'
 
 // Service metadata: emoji, description, docs link
 const SERVICE_META = {
@@ -257,12 +258,8 @@ export default function PipelineHealth() {
     }
   }, [])
 
-  useEffect(() => {
-    fetchHealth()
-    // Auto-refresh every 60 seconds
-    const interval = setInterval(() => fetchHealth(true), 60000)
-    return () => clearInterval(interval)
-  }, [fetchHealth])
+  // Visibility-aware polling — pauses when tab is hidden, resumes on focus
+  useVisibilityPolling(useCallback(() => fetchHealth(true), [fetchHealth]), 60_000)
 
   const formatTimestamp = (date) => {
     if (!date) return 'never'
