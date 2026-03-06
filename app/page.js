@@ -252,6 +252,12 @@ export default function Roundtable() {
   // Search filter + quick filters (extracted to hook)
   const filteredTasks = useTaskSearch(tasks, searchQuery, quickFilters)
 
+  // Stable context menu handler — passed to KanbanBoard → TaskCard.
+  // useCallback keeps the reference stable so memo(TaskCard) can skip re-renders.
+  const handleTaskContextMenu = useCallback((e, task) => {
+    setContextMenu({ x: e.clientX, y: e.clientY, task })
+  }, [])
+
   // Generate pseudo-historical sparkline trends from current task data
   const generateSparkTrend = useCallback((current, seed = 0, volatility = 0.35) => {
     const pts = 8
@@ -426,7 +432,7 @@ export default function Roundtable() {
                     // Reorder is managed internally by KanbanBoard via localStorage.
                     // This callback allows parent to sync order to an external store if needed.
                   }}
-                  onTaskContextMenu={(e, task) => setContextMenu({ x: e.clientX, y: e.clientY, task })}
+                  onTaskContextMenu={handleTaskContextMenu}
                 />
               )
             )}

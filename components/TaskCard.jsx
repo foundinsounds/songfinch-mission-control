@@ -384,19 +384,31 @@ function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChang
     setShowPreview(false)
   }, [])
 
+  // Stable click/context handlers that pass task back to parent.
+  // This lets parent components pass stable (useCallback) references
+  // instead of creating new inline closures per-task, making memo() effective.
+  const handleClick = useCallback(() => {
+    onClick?.(task)
+  }, [onClick, task])
+
+  const handleContextMenu = useCallback((e) => {
+    e.preventDefault()
+    onContextMenu?.(e, task)
+  }, [onContextMenu, task])
+
   // Dense mode — minimal single-line: task name + status dot + agent emoji only
   if (density === 'dense') {
     return (
       <div
         ref={cardRef}
-        onClick={onClick}
-        onContextMenu={onContextMenu}
+        onClick={handleClick}
+        onContextMenu={onContextMenu ? handleContextMenu : undefined}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         tabIndex={0}
         role="button"
         aria-label={`${task.name}${task.priority ? `, ${task.priority}` : ''}, ${task.status}`}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.() } }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick() } }}
         className={`relative group flex items-center gap-1.5 px-2 py-1 rounded-md border border-dark-500/70 border-l-[4px] ${PRIORITY_STYLES[task.priority] || 'border-l-gray-600'} compact-card-hover cursor-pointer ${
           isSelected ? 'bg-accent-orange/10 border-accent-orange/30' : 'bg-dark-700/80 hover:bg-dark-600'
         } ${isDone ? 'opacity-70' : ''} ${isFocused ? 'ring-2 ring-accent-blue/60 bg-accent-blue/5' : ''} animate-card-enter-compact`}
@@ -443,14 +455,14 @@ function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChang
     return (
       <div
         ref={cardRef}
-        onClick={onClick}
-        onContextMenu={onContextMenu}
+        onClick={handleClick}
+        onContextMenu={onContextMenu ? handleContextMenu : undefined}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         tabIndex={0}
         role="button"
         aria-label={`${task.name}${task.priority ? `, ${task.priority}` : ''}, ${task.status}${agent ? `, ${agent.name}` : ''}`}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.() } }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick() } }}
         className={`relative group flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-dark-500 border-l-[4px] ${PRIORITY_STYLES[task.priority] || 'border-l-gray-600'} compact-card-hover cursor-pointer ${
           isSelected ? 'bg-accent-orange/10 border-accent-orange/30' : 'bg-dark-700 hover:bg-dark-600'
         } ${isDone ? 'opacity-75' : ''} ${isFocused ? 'ring-2 ring-accent-blue/60 bg-accent-blue/5' : ''} animate-card-enter-compact`}
@@ -527,8 +539,8 @@ function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChang
   return (
     <div
       ref={cardRef}
-      onClick={onClick}
-      onContextMenu={onContextMenu}
+      onClick={handleClick}
+      onContextMenu={onContextMenu ? handleContextMenu : undefined}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       tabIndex={0}
@@ -536,7 +548,7 @@ function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChang
       aria-label={`Task: ${task.name}${task.priority ? `, ${task.priority} priority` : ''}${task.status ? `, ${task.status}` : ''}${agent ? `, assigned to ${agent.name}` : ', unassigned'}`}
       className={`group task-card bg-dark-700 rounded-lg border border-dark-500 border-l-[4px] ${PRIORITY_STYLES[task.priority] || 'border-l-gray-600'} p-3 relative ${isDone ? 'opacity-85' : ''} ${isSelected ? 'ring-1 ring-accent-orange/40 bg-accent-orange/5' : ''} ${isFocused ? 'ring-2 ring-accent-blue/60 bg-accent-blue/5 shadow-lg shadow-accent-blue/10' : ''} animate-card-enter`}
       style={{ animationDelay: `${entranceDelay}ms`, animationFillMode: 'backwards' }}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.() } }}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick() } }}
     >
       {/* Hover Preview Popover */}
       {showPreview && <HoverPreview task={task} agent={agent} cardRef={cardRef} />}
@@ -744,7 +756,7 @@ function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChang
           <button
             onClick={(e) => {
               e.stopPropagation()
-              onRequestChanges ? onRequestChanges(task) : onClick()
+              onRequestChanges ? onRequestChanges(task) : handleClick()
             }}
             className="action-btn flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold px-2 py-1.5 rounded bg-accent-orange/10 text-accent-orange hover:bg-accent-orange/20 border border-accent-orange/20 hover:shadow-[0_0_12px_rgba(249,115,22,0.15)]"
           >
@@ -775,7 +787,7 @@ function TaskCard({ task, onClick, onContextMenu, onQuickApprove, onRequestChang
           <button
             onClick={(e) => {
               e.stopPropagation()
-              onClick && onClick()
+              handleClick()
             }}
             className="action-btn flex items-center justify-center gap-1 text-[10px] px-2 py-1.5 rounded bg-dark-600 text-gray-400 hover:text-gray-200 hover:bg-dark-500 border border-dark-500"
           >

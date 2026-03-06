@@ -1048,8 +1048,8 @@ export default function KanbanBoard({ tasks, agents = [], onTaskClick, onQuickAp
                           task={task}
                           compact={compactMode}
                           density={density}
-                          onClick={() => onTaskClick(task)}
-                          onContextMenu={onTaskContextMenu ? (e) => { e.preventDefault(); onTaskContextMenu(e, task) } : undefined}
+                          onClick={onTaskClick}
+                          onContextMenu={onTaskContextMenu}
                           onQuickApprove={onQuickApprove}
                           onRequestChanges={onRequestChanges}
                           onRetry={onRetry}
