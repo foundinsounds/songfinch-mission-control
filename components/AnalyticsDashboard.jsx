@@ -5,6 +5,7 @@ import { MODEL_OPTIONS, MODEL_LEGACY_MAP } from '../lib/constants'
 import PixelAgents from './PixelAgents'
 import AgentPerformanceChart from './AgentPerformanceChart'
 import AgentWorkflowLive from './AgentWorkflowLive'
+import AgentOrgChart from './AgentOrgChart'
 
 function resolveModel(m) {
   const resolved = MODEL_LEGACY_MAP[m] || m || 'claude-sonnet-4-6'
@@ -187,7 +188,7 @@ export default function AnalyticsDashboard({ agents, tasks, activity, onConfigAg
     { key: 'quality', label: 'Quality & Pipeline', icon: '\u{2B50}' },
     { key: 'visuals', label: 'Visuals & Calendar', icon: '\u{1F3A8}' },
     { key: 'intelligence', label: 'Intelligence', icon: '\u{1F9E0}' },
-    { key: 'orgchart', label: 'Workflow', icon: '⚡' },
+    { key: 'orgchart', label: 'Org Chart', icon: '🏛️' },
     { key: 'office', label: 'Agent Office', icon: '\u{1F3E2}' },
   ]
 
@@ -1198,9 +1199,9 @@ export default function AnalyticsDashboard({ agents, tasks, activity, onConfigAg
         </>
       )}
 
-      {/* ══════════ WORKFLOW TAB ══════════ */}
+      {/* ══════════ ORG CHART TAB ══════════ */}
       {tab === 'orgchart' && (
-        <AgentWorkflowLive agents={agents} tasks={tasks} activity={activity} onAgentClick={onConfigAgent} />
+        <AgentOrgChart agents={agents} tasks={tasks} onAgentClick={onConfigAgent} />
       )}
 
       {/* ══════════ AGENT OFFICE TAB ══════════ */}
