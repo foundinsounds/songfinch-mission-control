@@ -639,13 +639,6 @@ export default function Roundtable() {
           <span className="hidden sm:inline opacity-40">|</span>
           <span className="hidden sm:inline">{agents.length} agents</span>
           <ExportButton tasks={tasks} activity={activity} />
-          <span className="opacity-40">|</span>
-          <button onClick={() => setShowChat(!showChat)}
-            className="hover:text-accent-orange transition-colors flex items-center gap-1"
-            aria-label={showChat ? 'Close chat' : 'Open chat'}
-          >
-            <span aria-hidden="true">💬</span> <span className="hidden sm:inline">Chat</span>
-          </button>
         </div>
       </footer>
 
@@ -860,7 +853,7 @@ export default function Roundtable() {
       )}
 
       {/* Agent Chat */}
-      <AgentChat agents={agents} isOpen={showChat} onClose={() => setShowChat(false)} />
+      <AgentChat agents={agents} isOpen={showChat} onClose={() => setShowChat(false)} onOpen={() => setShowChat(true)} />
 
       {/* Command Bar */}
       <CommandBar

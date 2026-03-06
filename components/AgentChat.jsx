@@ -15,7 +15,7 @@ function storeMessages(msgs) {
   localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(msgs.slice(-200)))
 }
 
-export default function AgentChat({ agents, isOpen, onClose }) {
+export default function AgentChat({ agents, isOpen, onClose, onOpen }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [selectedChannel, setSelectedChannel] = useState('council')
@@ -41,6 +41,14 @@ export default function AgentChat({ agents, isOpen, onClose }) {
       setTimeout(() => inputRef.current?.focus(), 100)
     }
   }, [isOpen, selectedChannel, dmTarget])
+
+  // Close on Escape
+  useEffect(() => {
+    if (!isOpen) return
+    const handleEsc = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [isOpen, onClose])
 
   const channels = [
     { id: 'council', label: 'Council', icon: '\u{1F3DB}', desc: 'All agents' },
@@ -164,14 +172,34 @@ export default function AgentChat({ agents, isOpen, onClose }) {
     return m.channel === selectedChannel
   })
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-dark-700 border border-dark-500 rounded-xl w-full max-w-3xl h-[70vh] flex overflow-hidden shadow-2xl">
+    <>
+      {/* Floating Chat Button — always visible */}
+      {!isOpen && (
+        <button
+          onClick={onOpen}
+          className="fixed bottom-20 right-5 z-40 w-12 h-12 rounded-full bg-accent-orange/90 text-white shadow-lg hover:bg-accent-orange hover:scale-105 transition-all flex items-center justify-center group"
+          aria-label="Open Agent Chat"
+          title="Chat with agents (C)"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          {/* Unread pulse */}
+          {messages.some(m => m.sender !== 'You' && m.id > Date.now() - 120000) && (
+            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-red-500 border-2 border-dark-900" />
+          )}
+        </button>
+      )}
+
+      {/* Slide-in Panel */}
+      {isOpen && (
+        <div className="fixed inset-y-0 right-0 z-50 flex" style={{ top: 0 }}>
+          {/* Backdrop — click to close on mobile */}
+          <div className="absolute inset-0 -left-[100vw] bg-black/40 md:bg-transparent" onClick={onClose} />
+          <div className="relative bg-dark-700 border-l border-dark-500 w-[480px] max-w-[90vw] h-full flex overflow-hidden shadow-2xl animate-slide-in-right">
         {/* Sidebar */}
-        <div className="w-48 bg-dark-800 border-r border-dark-500 flex flex-col shrink-0">
+        <div className="w-40 bg-dark-800 border-r border-dark-500 flex flex-col shrink-0">
           <div className="px-3 py-3 border-b border-dark-500">
             <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
@@ -409,7 +437,9 @@ export default function AgentChat({ agents, isOpen, onClose }) {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
