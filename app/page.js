@@ -99,6 +99,7 @@ export default function Roundtable() {
   const [contextMenu, setContextMenu] = useState(null) // { x, y, task }
   const [focusedTaskId, setFocusedTaskId] = useState(null)
   const [systemPaused, setSystemPaused] = useState(false)
+  const [pauseToggling, setPauseToggling] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [quickFilters, setQuickFilters] = useState({ priorities: [], agents: [], contentTypes: [], statuses: [] })
 
@@ -147,6 +148,25 @@ export default function Roundtable() {
       if (d.paused !== undefined) setSystemPaused(d.paused)
     }).catch(() => {})
   }, [])
+
+  // Toggle system pause from dashboard
+  const handleTogglePause = useCallback(async () => {
+    setPauseToggling(true)
+    try {
+      const action = systemPaused ? 'resume' : 'pause'
+      const res = await fetch('/api/system', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, reason: action === 'pause' ? 'Paused from dashboard' : null }),
+      })
+      const data = await res.json()
+      if (data.success !== undefined) setSystemPaused(data.paused)
+    } catch (err) {
+      console.error('Failed to toggle pause:', err)
+    } finally {
+      setPauseToggling(false)
+    }
+  }, [systemPaused])
 
   // Handle agent config update (optimistic UI)
   const handleAgentUpdate = useCallback((updatedAgent) => {
@@ -395,12 +415,26 @@ export default function Roundtable() {
         Skip to main content
       </a>
       <FaviconBadge tasks={tasks} />
-      {systemPaused && (
-        <div className="bg-red-600 text-white text-center py-2 px-4 text-sm font-medium flex items-center justify-center gap-2">
-          <span className="inline-block w-2 h-2 bg-white rounded-full animate-pulse" />
-          SYSTEM PAUSED — All agent processing is halted. Set SYSTEM_PAUSED=false in Vercel env vars to resume.
+      {/* System Pause Banner — always visible, shows status + toggle */}
+      <div className={`${systemPaused ? 'bg-red-600' : 'bg-emerald-600'} text-white py-2 px-4 text-sm font-medium flex items-center justify-between`}>
+        <div className="flex items-center gap-2">
+          <span className={`inline-block w-2 h-2 rounded-full ${systemPaused ? 'bg-white animate-pulse' : 'bg-emerald-300'}`} />
+          {systemPaused
+            ? 'SYSTEM PAUSED — All agent processing & crons are halted'
+            : 'SYSTEM RUNNING — Crons are currently disabled in vercel.json (manual runs only)'}
         </div>
-      )}
+        <button
+          onClick={handleTogglePause}
+          disabled={pauseToggling}
+          className={`px-3 py-1 rounded text-xs font-bold transition-colors ${
+            systemPaused
+              ? 'bg-white text-red-600 hover:bg-red-100'
+              : 'bg-white/20 text-white hover:bg-white/30'
+          } disabled:opacity-50`}
+        >
+          {pauseToggling ? '...' : systemPaused ? 'Resume System' : 'Pause System'}
+        </button>
+      </div>
       {/* Top Header Bar */}
       <StatsHeader
         data={{ stats, sparklines, dataSource, lastSync }}

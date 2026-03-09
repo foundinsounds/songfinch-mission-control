@@ -5,6 +5,7 @@
 
 import { getActionableTasks, getAgents, updateTask, addActivity, addContent, getAllActivity, getTasksByCampaign, getCampaignNames, createTask } from '../../../../lib/airtable'
 import { callAI } from '../../../../lib/ai'
+import { isSystemPaused } from '../../../../lib/system-config'
 import {
   sortByPriorityTier,
   assignPriorityTier,
@@ -509,12 +510,13 @@ function isAuthorized(request) {
 }
 
 export async function GET(request) {
-  // KILL SWITCH: Set SYSTEM_PAUSED=true in Vercel env vars to halt all agent processing
-  if (process.env.SYSTEM_PAUSED === 'true') {
+  // KILL SWITCH: Checks Vercel Blob config + env var fallback
+  const paused = await isSystemPaused()
+  if (paused || process.env.SYSTEM_PAUSED === 'true') {
     console.log('[RUNNER] System is PAUSED — skipping cycle')
     return NextResponse.json({
       paused: true,
-      message: 'System is paused. Set SYSTEM_PAUSED to false in Vercel env vars to resume.',
+      message: 'System is paused. Use the dashboard toggle or set SYSTEM_PAUSED=false to resume.',
     })
   }
 

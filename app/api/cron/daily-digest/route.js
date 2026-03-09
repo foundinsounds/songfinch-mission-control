@@ -4,14 +4,16 @@
 
 import { getTasks, getAgents, getActivityFeed, getAllActivity } from '../../../../lib/airtable'
 import { notifyDailyDigest } from '../../../../lib/slack'
+import { isSystemPaused } from '../../../../lib/system-config'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 export async function GET(request) {
-  // KILL SWITCH: Set SYSTEM_PAUSED=true in Vercel env vars to halt all cron processing
-  if (process.env.SYSTEM_PAUSED === 'true') {
+  // KILL SWITCH: Checks Vercel Blob config + env var fallback
+  const paused = await isSystemPaused()
+  if (paused || process.env.SYSTEM_PAUSED === 'true') {
     console.log('[DIGEST] System is PAUSED — skipping digest')
     return NextResponse.json({ paused: true, message: 'System is paused' })
   }

@@ -5,6 +5,7 @@
 import { getAgents, addActivity, getTasks } from '../../../../lib/airtable'
 import { callAI } from '../../../../lib/ai'
 import { parseActions, executeActions, ACTION_DEFINITIONS } from '../../../../lib/chat-actions'
+import { isSystemPaused } from '../../../../lib/system-config'
 import { NextResponse } from 'next/server'
 import { safeJsonParse, badRequest } from '../../../../lib/api-utils'
 
@@ -46,12 +47,27 @@ ${ACTION_DEFINITIONS}`,
 
 export async function POST(request) {
   try {
+    // Check system pause — still allow chat but warn user
+    const paused = await isSystemPaused()
+
     const { data: body, error } = await safeJsonParse(request)
     if (error) return error
     const { message, channel, agentName, conversationHistory = [] } = body
 
     if (!message?.trim()) {
       return badRequest('Message is required')
+    }
+
+    // If paused, return a helpful message without making AI API calls
+    if (paused) {
+      return NextResponse.json({
+        response: '⏸️ System is currently paused to conserve API credits. Use the banner toggle at the top of the dashboard to resume, then try again.',
+        respondingAs: 'System',
+        respondingEmoji: '⚙️',
+        respondingColor: '#ef4444',
+        timestamp: new Date().toISOString(),
+        actions: [],
+      })
     }
 
     // Fetch agents to get system prompts and configs
