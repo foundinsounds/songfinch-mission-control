@@ -100,6 +100,9 @@ export default function Roundtable() {
   const [focusedTaskId, setFocusedTaskId] = useState(null)
   const [systemPaused, setSystemPaused] = useState(false)
   const [pauseToggling, setPauseToggling] = useState(false)
+  const [budget, setBudget] = useState(null) // { dailyLimit, todayCalls, remaining, percentUsed, totalCallsAllTime }
+  const [budgetEditing, setBudgetEditing] = useState(false)
+  const [budgetInput, setBudgetInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [quickFilters, setQuickFilters] = useState({ priorities: [], agents: [], contentTypes: [], statuses: [] })
 
@@ -142,12 +145,20 @@ export default function Roundtable() {
     settingsRev,
   })
 
-  // System pause status check
-  useEffect(() => {
+  // System pause status + budget check
+  const fetchSystemStatus = useCallback(() => {
     fetch('/api/system').then(r => r.json()).then(d => {
       if (d.paused !== undefined) setSystemPaused(d.paused)
+      if (d.budget) setBudget(d.budget)
     }).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    fetchSystemStatus()
+    // Refresh system status every 30s to keep budget counter current
+    const interval = setInterval(fetchSystemStatus, 30000)
+    return () => clearInterval(interval)
+  }, [fetchSystemStatus])
 
   // Toggle system pause from dashboard
   const handleTogglePause = useCallback(async () => {
@@ -161,12 +172,33 @@ export default function Roundtable() {
       })
       const data = await res.json()
       if (data.success !== undefined) setSystemPaused(data.paused)
+      fetchSystemStatus() // refresh budget too
     } catch (err) {
       console.error('Failed to toggle pause:', err)
     } finally {
       setPauseToggling(false)
     }
-  }, [systemPaused])
+  }, [systemPaused, fetchSystemStatus])
+
+  // Update budget cap
+  const handleSetBudget = useCallback(async (newBudget) => {
+    try {
+      const res = await fetch('/api/system', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set-budget', dailyBudget: newBudget }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setBudgetEditing(false)
+        fetchSystemStatus()
+        showToast(`Daily budget set to ${newBudget} calls`, 'success')
+      }
+    } catch (err) {
+      console.error('Failed to set budget:', err)
+      showToast('Failed to update budget', 'error')
+    }
+  }, [fetchSystemStatus, showToast])
 
   // Handle agent config update (optimistic UI)
   const handleAgentUpdate = useCallback((updatedAgent) => {
@@ -415,25 +447,95 @@ export default function Roundtable() {
         Skip to main content
       </a>
       <FaviconBadge tasks={tasks} />
-      {/* System Pause Banner — always visible, shows status + toggle */}
-      <div className={`${systemPaused ? 'bg-red-600' : 'bg-emerald-600'} text-white py-2 px-4 text-sm font-medium flex items-center justify-between`}>
-        <div className="flex items-center gap-2">
-          <span className={`inline-block w-2 h-2 rounded-full ${systemPaused ? 'bg-white animate-pulse' : 'bg-emerald-300'}`} />
-          {systemPaused
-            ? 'SYSTEM PAUSED — All agent processing & crons are halted'
-            : 'SYSTEM RUNNING — Crons are currently disabled in vercel.json (manual runs only)'}
+      {/* System Control Bar — status, budget gauge, and controls */}
+      <div className={`${systemPaused ? 'bg-red-600' : 'bg-emerald-600'} text-white py-2 px-4 text-sm font-medium`}>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          {/* Left: Status indicator */}
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${systemPaused ? 'bg-white animate-pulse' : 'bg-emerald-300'}`} />
+            <span className="truncate">
+              {systemPaused
+                ? 'SYSTEM PAUSED — All agent processing & crons are halted'
+                : 'SYSTEM RUNNING — Crons disabled in vercel.json (manual runs only)'}
+            </span>
+          </div>
+
+          {/* Center: Budget gauge */}
+          {budget && (
+            <div className="flex items-center gap-3 flex-shrink-0">
+              {/* Usage bar */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs opacity-80 whitespace-nowrap">API Budget:</span>
+                <div className="w-24 h-2 bg-white/20 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      budget.percentUsed >= 90 ? 'bg-red-300' :
+                      budget.percentUsed >= 70 ? 'bg-yellow-300' :
+                      'bg-white/70'
+                    }`}
+                    style={{ width: `${Math.min(100, budget.percentUsed)}%` }}
+                  />
+                </div>
+                <span className="text-xs font-mono whitespace-nowrap">
+                  {budget.todayCalls}/{budget.dailyLimit || '∞'}
+                </span>
+              </div>
+
+              {/* Edit budget button / inline editor */}
+              {budgetEditing ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="1000"
+                    value={budgetInput}
+                    onChange={e => setBudgetInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleSetBudget(parseInt(budgetInput, 10) || 0)
+                      if (e.key === 'Escape') setBudgetEditing(false)
+                    }}
+                    className="w-16 px-1 py-0.5 rounded text-xs bg-white/20 text-white border border-white/30 focus:outline-none focus:border-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    autoFocus
+                    placeholder="50"
+                  />
+                  <button
+                    onClick={() => handleSetBudget(parseInt(budgetInput, 10) || 0)}
+                    className="px-1.5 py-0.5 rounded text-xs bg-white/20 hover:bg-white/30"
+                  >
+                    Set
+                  </button>
+                  <button
+                    onClick={() => setBudgetEditing(false)}
+                    className="px-1.5 py-0.5 rounded text-xs bg-white/10 hover:bg-white/20"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setBudgetInput(String(budget.dailyLimit || 50)); setBudgetEditing(true) }}
+                  className="px-2 py-0.5 rounded text-xs bg-white/10 hover:bg-white/20 transition-colors whitespace-nowrap"
+                  title="Edit daily API budget"
+                >
+                  Edit Cap
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Right: Pause toggle */}
+          <button
+            onClick={handleTogglePause}
+            disabled={pauseToggling}
+            className={`px-3 py-1 rounded text-xs font-bold transition-colors flex-shrink-0 ${
+              systemPaused
+                ? 'bg-white text-red-600 hover:bg-red-100'
+                : 'bg-white/20 text-white hover:bg-white/30'
+            } disabled:opacity-50`}
+          >
+            {pauseToggling ? '...' : systemPaused ? 'Resume System' : 'Pause System'}
+          </button>
         </div>
-        <button
-          onClick={handleTogglePause}
-          disabled={pauseToggling}
-          className={`px-3 py-1 rounded text-xs font-bold transition-colors ${
-            systemPaused
-              ? 'bg-white text-red-600 hover:bg-red-100'
-              : 'bg-white/20 text-white hover:bg-white/30'
-          } disabled:opacity-50`}
-        >
-          {pauseToggling ? '...' : systemPaused ? 'Resume System' : 'Pause System'}
-        </button>
       </div>
       {/* Top Header Bar */}
       <StatsHeader

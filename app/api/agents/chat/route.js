@@ -161,23 +161,29 @@ export async function POST(request) {
     console.error('[CHAT] Error:', err)
 
     // Differentiate error types for better UX feedback
+    const isBudget = err.message?.startsWith('BUDGET_EXCEEDED:')
+    const isPayment = err.message?.includes('402') || err.message?.toLowerCase().includes('insufficient')
     const isRateLimit = err.message?.includes('429') || err.message?.toLowerCase().includes('rate limit')
     const isTimeout = err.message?.includes('timeout') || err.message?.includes('ETIMEDOUT')
     const isAuth = err.message?.includes('401') || err.message?.includes('403') || err.message?.includes('auth')
 
-    const status = isRateLimit ? 429 : isAuth ? 403 : isTimeout ? 504 : 500
-    const fallbackMessage = isRateLimit
-      ? "I'm being rate limited right now. Please wait a moment and try again."
-      : isTimeout
-        ? "The request timed out. The AI service might be slow — try again shortly."
-        : isAuth
-          ? "Authentication error. Please check that API keys are configured correctly."
-          : "I'm having trouble connecting right now. Please try again in a moment."
+    const status = isBudget ? 429 : isPayment ? 402 : isRateLimit ? 429 : isAuth ? 403 : isTimeout ? 504 : 500
+    const fallbackMessage = isBudget
+      ? "⚠️ Daily API budget reached. Use the budget slider in the control bar to increase the limit, or wait until tomorrow when the counter resets."
+      : isPayment
+        ? "💳 API credits exhausted. Please add credits to your AI provider account, or switch to a different provider."
+        : isRateLimit
+          ? "I'm being rate limited right now. Please wait a moment and try again."
+          : isTimeout
+            ? "The request timed out. The AI service might be slow — try again shortly."
+            : isAuth
+              ? "Authentication error. Please check that API keys are configured correctly."
+              : "I'm having trouble connecting right now. Please try again in a moment."
 
     return NextResponse.json({
       error: err.message,
       fallbackMessage,
-      errorType: isRateLimit ? 'rate_limit' : isTimeout ? 'timeout' : isAuth ? 'auth' : 'server_error',
+      errorType: isBudget ? 'budget_exceeded' : isPayment ? 'payment' : isRateLimit ? 'rate_limit' : isTimeout ? 'timeout' : isAuth ? 'auth' : 'server_error',
     }, { status })
   }
 }
