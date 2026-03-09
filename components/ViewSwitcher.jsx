@@ -27,7 +27,7 @@ const MORE_VIEWS = [
   { key: 'webhooks', label: 'Webhooks' },
 ]
 
-export default function ViewSwitcher({ currentView, onViewChange, inReview = 0, inboxCount = 0 }) {
+export default function ViewSwitcher({ currentView, onViewChange, inReview = 0, inboxCount = 0, simpleMode = false, onToggleSimpleMode }) {
   const [showMore, setShowMore] = useState(false)
   const dropdownRef = useRef(null)
 
@@ -52,6 +52,29 @@ export default function ViewSwitcher({ currentView, onViewChange, inReview = 0, 
 
   return (
     <div className="px-2 sm:px-4 py-1.5 border-b border-dark-500 flex items-center gap-0.5 shrink-0 bg-dark-800/30 overflow-x-auto scrollbar-hide">
+      {/* Simple / Full mode toggle */}
+      {onToggleSimpleMode && (
+        <>
+          <button
+            onClick={onToggleSimpleMode}
+            className={`text-[11px] px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              simpleMode
+                ? 'bg-accent-orange/15 text-accent-orange font-semibold'
+                : 'text-gray-500 hover:text-gray-300 hover:bg-dark-600'
+            }`}
+            title="Clean overview of what agents are doing"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+            Simple
+          </button>
+          <div className="w-px h-4 bg-dark-500 mx-1" />
+        </>
+      )}
       {PRIMARY_VIEWS.map((view) => {
         const badge = getBadge(view.key)
         return (

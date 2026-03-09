@@ -41,6 +41,7 @@ import AgentHealthSparklines from '../components/AgentHealthSparklines'
 import BulkActions, { useTaskSelection } from '../components/BulkActions'
 import AgentWorkloadBalancer from '../components/AgentWorkloadBalancer'
 import AgentWorkflowLive from '../components/AgentWorkflowLive'
+import SimpleView from '../components/SimpleView'
 import ViewTransition from '../components/ViewTransition'
 import QuickFiltersBar from '../components/QuickFiltersBar'
 import FooterSparkline from '../components/FooterSparkline'
@@ -96,6 +97,7 @@ export default function Roundtable() {
   const [showQuickCreate, setShowQuickCreate] = useState(false)
   const [showTimeline, setShowTimeline] = useState(false)
   const [focusModeActive, setFocusModeActive] = useState(false)
+  const [simpleMode, setSimpleMode] = useState(false)
   const [contextMenu, setContextMenu] = useState(null) // { x, y, task }
   const [focusedTaskId, setFocusedTaskId] = useState(null)
   const [systemPaused, setSystemPaused] = useState(false)
@@ -578,23 +580,25 @@ export default function Roundtable() {
           />
         )}
 
-        {/* Agent Sidebar — hidden on mobile unless toggled */}
-        <div className={`${mobileSidebar ? 'mobile-sidebar block' : 'hidden'} md:block`}>
-          <AgentSidebar
-            agents={agents}
-            selectedAgent={selectedAgent}
-            onSelectAgent={(name) => { setSelectedAgent(selectedAgent === name ? null : name); setMobileSidebar(false) }}
-            onConfigAgent={(agent) => { setConfigAgent(agent); setMobileSidebar(false) }}
-            tasks={tasks}
-            collapsed={sidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed(prev => !prev)}
-          />
-        </div>
+        {/* Agent Sidebar — hidden in simple mode & on mobile unless toggled */}
+        {!simpleMode && (
+          <div className={`${mobileSidebar ? 'mobile-sidebar block' : 'hidden'} md:block`}>
+            <AgentSidebar
+              agents={agents}
+              selectedAgent={selectedAgent}
+              onSelectAgent={(name) => { setSelectedAgent(selectedAgent === name ? null : name); setMobileSidebar(false) }}
+              onConfigAgent={(agent) => { setConfigAgent(agent); setMobileSidebar(false) }}
+              tasks={tasks}
+              collapsed={sidebarCollapsed}
+              onToggleCollapse={() => setSidebarCollapsed(prev => !prev)}
+            />
+          </div>
+        )}
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Breadcrumb — only show when there's deeper navigation context */}
-          {(selectedAgent || selectedTask) && (
+          {/* Breadcrumb — only show when there's deeper navigation context (hidden in simple mode) */}
+          {!simpleMode && (selectedAgent || selectedTask) && (
             <Breadcrumb
               currentView={currentView}
               selectedAgent={selectedAgent}
@@ -608,19 +612,28 @@ export default function Roundtable() {
           )}
 
           {/* View Switcher — Primary tabs + More dropdown */}
-          <ViewSwitcher currentView={currentView} onViewChange={setCurrentView} inReview={stats.inReview} inboxCount={inboxCount} />
-
-          {/* Quick Create Bar — inline keyboard-driven task creation */}
-          <QuickCreateBar
-            isOpen={showQuickCreate}
-            onClose={() => setShowQuickCreate(false)}
-            onCreateTask={handleCreateTask}
-            agents={agents}
-            existingTasks={tasks}
+          <ViewSwitcher
+            currentView={currentView}
+            onViewChange={(view) => { setSimpleMode(false); setCurrentView(view) }}
+            inReview={stats.inReview}
+            inboxCount={inboxCount}
+            simpleMode={simpleMode}
+            onToggleSimpleMode={() => setSimpleMode(s => !s)}
           />
 
-          {/* Unified Search + Filters Toolbar */}
-          {(currentView === 'kanban' || currentView === 'list') && (
+          {/* Quick Create Bar — hidden in simple mode */}
+          {!simpleMode && (
+            <QuickCreateBar
+              isOpen={showQuickCreate}
+              onClose={() => setShowQuickCreate(false)}
+              onCreateTask={handleCreateTask}
+              agents={agents}
+              existingTasks={tasks}
+            />
+          )}
+
+          {/* Unified Search + Filters Toolbar — hidden in simple mode */}
+          {!simpleMode && (currentView === 'kanban' || currentView === 'list') && (
             <QuickFiltersBar
               tasks={tasks}
               agents={agents}
@@ -633,7 +646,16 @@ export default function Roundtable() {
             />
           )}
 
-          {/* View Content */}
+          {/* View Content — Simple mode or full views */}
+          {simpleMode ? (
+            <SimpleView
+              agents={agents}
+              tasks={tasks}
+              activity={activity}
+              onTaskClick={setSelectedTask}
+              onAgentClick={(agent) => setConfigAgent(agent)}
+            />
+          ) : (
           <ErrorBoundary name="Dashboard View">
           <ViewTransition viewKey={currentView} className="flex-1 overflow-auto">
             {currentView === 'kanban' && (
@@ -773,6 +795,7 @@ export default function Roundtable() {
             )}
           </ViewTransition>
           </ErrorBoundary>
+          )}
         </div>
 
         {/* Mobile Feed Overlay */}
